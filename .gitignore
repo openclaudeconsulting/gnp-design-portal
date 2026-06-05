@@ -39,3 +39,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/app/generated/prisma
+
+# local SQLite (chunk e will replace with Postgres for production)
+dev.db
+dev.db-journal
+
+# nothing in /out/ — generated on each build. We DO commit the built
+# output into southern-barn-builders/design-portal/ for Cloudflare Pages
+# to serve. THIS repo (the source) stays clean.
+

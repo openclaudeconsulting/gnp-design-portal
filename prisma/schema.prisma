@@ -1,0 +1,63 @@
+// GNP Design Portal — database schema
+// SQLite for local dev (zero setup); change provider + DATABASE_URL for Postgres.
+//
+// Lifecycle (JobStatus, see lib/types/building-config.ts):
+//   draft -> submitted-for-engineering -> in-engineering -> sealed
+//        -> quoted-final -> won | lost
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // NOTE (Prisma 7+): `url` is NOT set here anymore — it lives in
+  // `prisma.config.ts` (which reads `process.env["DATABASE_URL"]`).
+}
+
+/// One customer's building design + its status through the engineering pipeline.
+/// configJson + quoteJson are the full snapshots; the other columns are
+/// denormalized for fast filtering on the internal jobs list page.
+model Job {
+  id        String @id @default(cuid())
+  jobNumber String @unique
+  status    String @default("draft")
+
+  // Customer contact
+  customerName  String
+  customerEmail String?
+  customerPhone String?
+
+  // Site / hazard (denormalized for list-page filtering)
+  siteCity         String?
+  siteCounty       String?
+  siteState        String?
+  siteZip          String?
+  designWindMph    Int?
+  exposureCategory String?
+  riskCategory     String?
+
+  // Shell summary (denormalized for list view)
+  widthFt      Int?
+  lengthFt     Int?
+  eaveHeightFt Int?
+
+  // Pricing summary (denormalized; full breakdown lives in quoteJson)
+  totalLow  Float?
+  totalHigh Float?
+
+  // Snapshots — the full structured payload for traceability + PE handoff
+  configJson String // BuildingConfig as JSON
+  quoteJson  String // QuoteBreakdown as JSON
+
+  // Metadata
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  submittedAt DateTime?
+  sealedAt    DateTime?
+  notes       String? // free-text staff notes
+
+  @@index([status])
+  @@index([createdAt])
+  @@index([siteState])
+}

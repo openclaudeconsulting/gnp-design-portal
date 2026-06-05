@@ -1,36 +1,93 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GNP Design Portal
 
-## Getting Started
+A web portal where customers configure a barndominium / post-frame building
+(size, roof, doors, windows, porches, interior, finishes), get an instant
+ballpark quote, and have the design submitted as a structured **engineering
+package** routed to a licensed Professional Engineer for site-specific
+wind-load sealing.
 
-First, run the development server:
+> **Non-negotiable:** the portal *prepares* the submittal package; a licensed
+> PE *seals* it. The portal **never** produces stamped or permit-ready plans
+> on its own.
 
-```bash
+## Quick start (Windows)
+
+```powershell
+# install dependencies
+npm install
+
+# create local DB + generate Prisma client
+npx prisma migrate dev --name init
+
+# copy env template, fill in anything you want set locally
+copy .env.example .env
+
+# run the dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open <http://localhost:3000> in a browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Where to edit what
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The owner edits configuration, not components. Three files cover ~everything:
 
-## Learn More
+| Edit | File |
+|------|------|
+| Pricing rates | `lib/config/pricing.config.ts` |
+| County wind-speed table | `lib/config/wind-speeds.ts` |
+| Disclaimer / legal text | `lib/config/disclaimer.ts` |
+| Brand info + PE contact | `lib/config/brand.ts` (+ `.env`) |
+| DB schema | `prisma/schema.prisma` |
 
-To learn more about Next.js, take a look at the following resources:
+## Environment variables
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Set in `.env` (gitignored). Template lives in `.env.example`.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+| Variable             | Purpose                                          |
+|----------------------|--------------------------------------------------|
+| `DATABASE_URL`       | SQLite (dev) or Postgres (prod) connection      |
+| `N8N_WEBHOOK_URL`    | Where the submit flow POSTs the engineering package |
+| `PE_CONTACT_NAME`    | Display name of the licensed PE                  |
+| `PE_CONTACT_EMAIL`   | PE email (included in the submittal payload)     |
+| `PE_CONTACT_PHONE`   | PE phone                                          |
+| `PE_LICENSE_NUMBER`  | PE license number                                |
 
-## Deploy on Vercel
+## Tech stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Next.js 16** (App Router) + **TypeScript**
+- **Tailwind CSS 4**
+- **Prisma** + **SQLite** (Postgres-ready: change provider + URL)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Architecture
+
+```
+app/                    Next.js routes (wizard, jobs list, confirmation, api)
+lib/
+  types/                BuildingConfig (single source of truth)
+  config/               Owner-editable constants
+  services/             site-hazard, quote-engine
+  db.ts                 Prisma singleton
+prisma/
+  schema.prisma         Job model
+  dev.db                Local SQLite (gitignored)
+```
+
+## Phase roadmap
+
+- **Phase 1 (MVP)** — wizard, quote engine, submit flow, jobs list. *Currently building.*
+- **Phase 2** — master library of PE-pre-blessed envelopes · PDF spec sheets · customer accounts.
+- **Phase 3** — 3D preview (three.js) · LLM-generated scope narrative.
+
+## Related projects
+
+- `../southern-barn-builders/` — the public GNP marketing site + employee
+  portal (Cloudflare Pages, static + functions). Separate codebase + deploy.
+
+## Legal / engineering boundary
+
+GNP Steel Trusses supplies engineered + sealed plan packages and the steel
+truss / kit components. **Erection of habitable structures must be performed
+by a licensed builder/contractor in the project state.** The PE seal is
+site-specific and human; the portal's automation does **not** perform the
+engineering.
