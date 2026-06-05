@@ -1,6 +1,13 @@
 "use client";
 
+import { useState } from "react";
+
 import { DISCLAIMERS } from "@/lib/config/disclaimer";
+import {
+  submitDesign,
+  SubmitError,
+  type SubmitResult,
+} from "@/lib/services/submit";
 
 import { useWizard } from "./WizardProvider";
 
@@ -21,9 +28,16 @@ interface ReviewSection {
   rows: Row[];
 }
 
+type SubmitStatus = "idle" | "submitting" | "success" | "error";
+
 export function StepReview() {
   const { config: c, quote, setStepIndex } = useWizard();
   const cust = c.customer;
+
+  const [status, setStatus] = useState<SubmitStatus>("idle");
+  const [result, setResult] = useState<SubmitResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notes, setNotes] = useState<string>("");
 
   // ── Build a flat list of summary sections ───────────────────────────
   const sections: ReviewSection[] = [
@@ -193,6 +207,45 @@ export function StepReview() {
   if (!c.site.city.trim()) missing.push("City");
   const isReady = missing.length === 0;
 
+  // ── Submit handler ──────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!isReady || status === "submitting") return;
+    setStatus("submitting");
+    setError(null);
+    try {
+      const res = await submitDesign({
+        config: c,
+        quote,
+        customer: cust,
+        submittedAt: new Date().toISOString(),
+        notes: notes.trim() || undefined,
+      });
+      setResult(res);
+      setStatus("success");
+    } catch (e) {
+      const message =
+        e instanceof SubmitError
+          ? `${e.message} (status ${e.status})`
+          : e instanceof Error
+            ? e.message
+            : "Unknown error";
+      setError(message);
+      setStatus("error");
+    }
+  };
+
+  // ── Success view replaces the page after submit ─────────────────────
+  if (status === "success" && result) {
+    return (
+      <SuccessPanel
+        result={result}
+        customer={cust}
+        ballparkLow={quote.ballparkLow}
+        ballparkHigh={quote.ballparkHigh}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6">
       <p className="text-sm text-zinc-400">
@@ -291,6 +344,27 @@ export function StepReview() {
         </div>
       </section>
 
+      {/* Optional customer notes */}
+      <section>
+        <label className="block">
+          <div className="text-sm font-medium text-zinc-300 mb-1.5">
+            Notes for the PE / sales team (optional)
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            maxLength={300}
+            placeholder="Any context that doesn't fit in the form — site quirks, timeline, special requests"
+            className="w-full bg-zinc-900 border border-zinc-700 rounded-md px-3 py-2 text-zinc-100 focus:outline-none focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500"
+            disabled={status === "submitting"}
+          />
+          <p className="mt-1 text-xs text-zinc-500">
+            {notes.length}/300 — appended to the Discord summary verbatim.
+          </p>
+        </label>
+      </section>
+
       {/* Disclaimers */}
       <div className="space-y-3">
         <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80 leading-relaxed">
@@ -313,23 +387,149 @@ export function StepReview() {
           <div className="rounded-md border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm text-red-200">
             <strong>Not ready to submit.</strong> Missing required fields:{" "}
             <span className="font-mono">{missing.join(", ")}</span>. Use the
-            "Edit ↗" links above to fix.
+            &quot;Edit ↗&quot; links above to fix.
+          </div>
+        )}
+        {status === "error" && error && (
+          <div className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <strong>Submit failed.</strong>{" "}
+            <span className="font-mono text-xs">{error}</span>
+            <div className="mt-1 text-xs text-red-300/80">
+              Click the button again to retry. If it keeps failing, contact
+              GNP and reference your quote configuration.
+            </div>
           </div>
         )}
         <button
           type="button"
-          disabled
-          aria-disabled="true"
-          title="Submit pipeline lands in chunk (e)"
-          className="w-full px-5 py-3 bg-amber-500/40 text-zinc-900 font-semibold rounded-md cursor-not-allowed"
+          onClick={handleSubmit}
+          disabled={!isReady || status === "submitting"}
+          className={[
+            "w-full px-5 py-3 font-semibold rounded-md transition-colors",
+            !isReady || status === "submitting"
+              ? "bg-amber-500/40 text-zinc-900 cursor-not-allowed"
+              : "bg-amber-500 hover:bg-amber-400 text-zinc-950 shadow shadow-amber-500/20",
+          ].join(" ")}
         >
-          Submit for engineering review
+          {status === "submitting" ? (
+            <span className="inline-flex items-center gap-2">
+              <Spinner /> Submitting…
+            </span>
+          ) : (
+            "Submit for engineering review"
+          )}
         </button>
         <p className="text-xs text-zinc-500 text-center">
-          Submit is wired up in chunk (e) — DB persist + n8n webhook routes the
-          submittal package to the PE.
+          Submission lands in the GNP team queue. A licensed PE will review and
+          contact you within 5–10 business days.
         </p>
       </div>
     </div>
+  );
+}
+
+// ── Success panel ────────────────────────────────────────────────────────
+
+function SuccessPanel({
+  result,
+  customer,
+  ballparkLow,
+  ballparkHigh,
+}: {
+  result: SubmitResult;
+  customer: { name: string; email?: string };
+  ballparkLow: number;
+  ballparkHigh: number;
+}) {
+  return (
+    <div className="space-y-6">
+      <div className="rounded-lg border border-green-500/40 bg-green-500/10 px-6 py-8 text-center">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-green-500 text-zinc-950 text-2xl font-bold mb-4">
+          ✓
+        </div>
+        <h2 className="text-2xl font-bold text-zinc-100">
+          Submitted for engineering review
+        </h2>
+        <p className="mt-2 text-sm text-zinc-400">
+          Thanks, {customer.name}. Your design package is in the GNP queue.
+        </p>
+
+        <div className="mt-6 inline-block bg-zinc-950/60 border border-zinc-800 rounded-md px-4 py-2">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500 font-semibold">
+            Reference
+          </div>
+          <div className="text-lg font-mono text-amber-300 mt-0.5">
+            {result.submissionId}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-md border border-zinc-800 bg-zinc-950/60 px-4 py-3 text-sm text-zinc-300 space-y-2">
+        <p>
+          A licensed Professional Engineer will review the configuration
+          against the site-specific wind exposure and risk category, may
+          request clarifications, and will produce a sealed plan set if the
+          design is approvable as drawn.
+        </p>
+        <p>
+          You&apos;ll receive an updated quote with final pricing once
+          engineering is complete.{" "}
+          <span className="text-zinc-400">
+            Typical turnaround is 5–10 business days.
+          </span>
+        </p>
+        {customer.email && (
+          <p className="text-xs text-zinc-500 pt-1">
+            Confirmations will be sent to{" "}
+            <span className="font-mono text-zinc-300">{customer.email}</span>.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80 leading-relaxed">
+        <strong className="text-amber-300">Ballpark range:</strong>{" "}
+        ${ballparkLow.toLocaleString()} – ${ballparkHigh.toLocaleString()} — final pricing confirmed after engineering review and material takeoff. This range is not a contract price.
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+        <a
+          href="/design-portal/"
+          className="inline-flex items-center justify-center px-5 py-2.5 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-zinc-100 rounded-md text-sm transition-colors"
+        >
+          Design another building
+        </a>
+        <a
+          href="/"
+          className="inline-flex items-center justify-center px-5 py-2.5 border border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:text-zinc-100 rounded-md text-sm transition-colors"
+        >
+          Back to GNP main site
+        </a>
+      </div>
+    </div>
+  );
+}
+
+function Spinner() {
+  return (
+    <svg
+      className="animate-spin w-4 h-4"
+      fill="none"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+    >
+      <circle
+        className="opacity-25"
+        cx="12"
+        cy="12"
+        r="10"
+        stroke="currentColor"
+        strokeWidth="4"
+      />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+      />
+    </svg>
   );
 }
