@@ -5,15 +5,17 @@ import { StepFinishes } from "./StepFinishes";
 import { StepFoundation } from "./StepFoundation";
 import { StepInterior } from "./StepInterior";
 import { StepOpenings } from "./StepOpenings";
+import { StepReview } from "./StepReview";
 import { StepRoof } from "./StepRoof";
 import { StepShell } from "./StepShell";
+import { StepSite } from "./StepSite";
 import { useWizard } from "./WizardProvider";
 
 /**
  * Switches the visible step component based on the wizard's stepIndex.
  *
- * Steps not yet implemented (chunk d Site, Review; chunk e Submit) render a
- * "Coming soon" placeholder so the wizard chrome stays exercisable.
+ * Phase 1 chunks (a-d) are wired in. Chunk (e) will wire Submit on the
+ * Review step (currently the Review screen renders a disabled placeholder).
  */
 export function WizardStepRouter() {
   const { stepIndex, steps } = useWizard();
@@ -33,6 +35,10 @@ export function WizardStepRouter() {
       return <StepInterior />;
     case 6:
       return <StepFinishes />;
+    case 7:
+      return <StepSite />;
+    case 8:
+      return <StepReview />;
     default:
       return <ComingSoon stepLabel={steps[stepIndex].label} />;
   }

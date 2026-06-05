@@ -96,6 +96,8 @@ interface WizardContextValue {
   patchAdditions:      (patch: Partial<BuildingConfig["additions"]>) => void;
   patchInterior:       (patch: Partial<BuildingConfig["interior"]>) => void;
   patchExteriorFinish: (patch: Partial<BuildingConfig["exteriorFinish"]>) => void;
+  patchSite:           (patch: Partial<BuildingConfig["site"]>) => void;
+  patchCustomer:       (patch: Partial<BuildingConfig["customer"]>) => void;
   /** Live, memoized quote. */
   quote: QuoteBreakdown;
   stepIndex: number;
@@ -173,6 +175,18 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     },
     [setConfig],
   );
+  const patchSite = useCallback(
+    (patch: Partial<BuildingConfig["site"]>) => {
+      setConfig((c) => ({ ...c, site: { ...c.site, ...patch } }));
+    },
+    [setConfig],
+  );
+  const patchCustomer = useCallback(
+    (patch: Partial<BuildingConfig["customer"]>) => {
+      setConfig((c) => ({ ...c, customer: { ...c.customer, ...patch } }));
+    },
+    [setConfig],
+  );
 
   const quote = useMemo(() => buildQuote(config), [config]);
 
@@ -194,6 +208,8 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         patchAdditions,
         patchInterior,
         patchExteriorFinish,
+        patchSite,
+        patchCustomer,
         quote,
         stepIndex,
         setStepIndex,
