@@ -9,48 +9,72 @@
  *
  * Units: USD; per square foot unless noted otherwise.
  *
- * ── CALIBRATION (2026-06-06) ──────────────────────────────────────────
+ * ── PRICING MODEL (2026-06-06, owner-confirmed) ───────────────────────
  *
- * Target — enclosed-barn rule of thumb from the owner:
- *   $14/sqft of footprint for the BUILDING (kit + labor combined),
- *   plus a separate slab line: $7.50/sqft for 3000 PSI 4", $8.00/sqft
- *   for 4000 PSI 4". Openings, additions, interior finish, and PE
- *   engineering fee layer on top.
+ * Buildings are quoted as ONE base "building" line item that bundles the
+ * kit + labor + ROOF (sheets and install). Whether the build has walls is
+ * the primary price driver:
  *
- * The "building" portion = STEEL + ROOF + SIDING. With the rates below,
- * a standard 40×60×12 (2400 sqft footprint) lands at:
- *   - Steel:  $6.75 × 2400               = $16,200
- *   - Roof:   $3.00 × 2400 × 1.083 (5:12) = $7,798
- *   - Siding: $4.00 × 2400 wall sqft     = $9,600
- *   ────────────────────────────────── total $33,598 = $14.00/sqft ✓
+ *   OPEN POLE BARN — roof only, no walls
+ *     - Tiered by width because wider trusses need thicker steel
+ *     - ≤40' wide:   $6.55/sqft   (kit + labor + roof, installed)
+ *     - 41-60' wide: $6.80/sqft
+ *     - 61'+ wide:   $7.50/sqft
  *
- * Sanity-checked against 58 historical INVOICE *.json sidecars:
- *   - 52 open quotes: median $6.66/sqft (≤40' wide), $7.17/sqft (41-60')
- *   - 4 enclosed quotes: median $9.40/sqft — historically UNDER-priced
- *     relative to the $14/sqft going-forward rule; that gap is the
- *     owner-elected price uplift
- *   - 4 of 5 slab quotes were exactly $7.00/sqft; new rates ($7.50/$8)
- *     are a modest bump.
+ *   ENCLOSED — walls + roof + labor
+ *     - Flat $14.00/sqft per owner rule of thumb (2026-06-06)
+ *     - Already includes the standard exposed-fastener metal roof,
+ *       vertical-metal siding, and all installation labor
  *
- * When the rule of thumb changes, edit THIS file and re-run the build
- * (the marketing site auto-deploys on push to main).
+ * Roof material (standing-seam, shingle) and siding material (board-and-
+ * batten, wood-cedar) charge a PREMIUM over those bundled defaults. They
+ * are NEVER a separate base line.
+ *
+ * Foundation is a separate line, per owner rates:
+ *   - 4" 3000 PSI slab: $7.50/sqft
+ *   - 4" 4000 PSI slab: $8.00/sqft (= base + $0.50 upcharge)
+ *   - 6" adds $1.50/sqft over the equivalent 4" depth
+ *
+ * Calibrated against 58 historical INVOICE *.json sidecars; matches the
+ * existing barn-builder.html rates (which were calibrated against 62
+ * historical orders 2026-05-19).
+ *
+ * When the rule of thumb changes, edit THIS file and re-run the build.
  */
 
 export const PRICING = {
   // ────────────────────────────────────────────────────────────────────
-  // Shell — per sqft of FOOTPRINT (width × length)
-  // Sized so STEEL + ROOF + SIDING ≈ $14/sqft on a typical build.
+  // OPEN POLE BARN — base rate per sqft of FOOTPRINT
+  // (kit + labor + roof installed; NO walls)
   // ────────────────────────────────────────────────────────────────────
-  STEEL_PER_SQFT_1STORY: 6.75,
-  STEEL_PER_SQFT_2STORY: 12.00,        // ~2x to account for upper-floor framing
-  CLEAR_SPAN_PREMIUM_PER_SQFT: 1.50,   // added when shell.clearSpan = true
+  OPEN_BUILDING_PER_SQFT_SMALL:  6.55,   // ≤40' wide
+  OPEN_BUILDING_PER_SQFT_MEDIUM: 6.80,   // 41-60' wide
+  OPEN_BUILDING_PER_SQFT_LARGE:  7.50,   // 61'+ wide
 
   // ────────────────────────────────────────────────────────────────────
-  // Roof — per sqft of ROOF AREA (footprint × pitch factor)
+  // ENCLOSED BUILDING — base rate per sqft of FOOTPRINT
+  // (kit + labor + roof + standard vertical-metal walls)
+  // Owner rule of thumb (2026-06-06): $14/sqft flat
   // ────────────────────────────────────────────────────────────────────
-  ROOF_STANDING_SEAM_PER_SQFT: 3.00,
-  ROOF_EXPOSED_FASTENER_PER_SQFT: 2.00,
-  ROOF_SHINGLE_PER_SQFT: 1.50,
+  ENCLOSED_BUILDING_PER_SQFT: 14.00,
+
+  // ────────────────────────────────────────────────────────────────────
+  // Structural premiums (applied to footprint)
+  // ────────────────────────────────────────────────────────────────────
+  CLEAR_SPAN_PREMIUM_PER_SQFT: 1.50,     // no interior support columns
+  TWO_STORY_MULTIPLIER: 1.75,            // 2-story = 1.75× the 1-story base
+                                          // (less than 2× because foundation
+                                          // is shared)
+
+  // ────────────────────────────────────────────────────────────────────
+  // Roof material — exposed-fastener metal is BUNDLED.
+  // Upgrades charge a per-sqft premium on ROOF AREA (footprint × pitch).
+  // ────────────────────────────────────────────────────────────────────
+  ROOF_PREMIUM_STANDING_SEAM_PER_SQFT_ROOF: 1.00,
+  ROOF_PREMIUM_SHINGLE_PER_SQFT_ROOF: 0.50,   // small upcharge for
+                                               // underlayment + nailers
+  // (exposed-fastener = $0 premium — it's the default)
+
   // Multipliers for converting footprint sqft → roof sqft (rough ballpark)
   PITCH_TO_ROOF_FACTOR: {
     "3:12": 1.031,
@@ -64,6 +88,23 @@ export const PRICING = {
     "11:12": 1.357,
     "12:12": 1.414,
   } as Record<string, number>,
+
+  // ────────────────────────────────────────────────────────────────────
+  // Siding material — vertical-metal is BUNDLED into the enclosed base.
+  // Upgrades charge a per-sqft premium on WALL AREA (perim × eave height).
+  // Only applies when shell.enclosed = true.
+  // ────────────────────────────────────────────────────────────────────
+  SIDING_PREMIUM_BOARD_AND_BATTEN_PER_SQFT_WALL: 3.50,
+  SIDING_PREMIUM_WOOD_CEDAR_PER_SQFT_WALL: 8.00,
+  CEDAR_ACCENT_LUMP_SUM: 2200,
+
+  // ────────────────────────────────────────────────────────────────────
+  // Insulation — per sqft of WALL + CEILING area (ceiling ≈ footprint).
+  // Only applies when shell.enclosed = true (no walls to insulate).
+  // ────────────────────────────────────────────────────────────────────
+  INSULATION_VINYL_FACED_FIBERGLASS_PER_SQFT: 1.50,
+  INSULATION_SPRAY_FOAM_PER_SQFT: 4.25,
+  INSULATION_IMP_PER_SQFT: 6.50,
 
   // ────────────────────────────────────────────────────────────────────
   // Foundation — per sqft of FOOTPRINT
@@ -82,12 +123,12 @@ export const PRICING = {
   // ────────────────────────────────────────────────────────────────────
   // Openings — placeholder ballparks (not yet calibrated to historical)
   // ────────────────────────────────────────────────────────────────────
-  OVERHEAD_DOOR_BASE: 1800,            // base per overhead door (10×10 typical)
-  OVERHEAD_DOOR_PER_SQFT_PREMIUM: 12,  // premium per sqft over 100 sqft
+  OVERHEAD_DOOR_BASE: 1800,              // base per overhead door (10×10 typical)
+  OVERHEAD_DOOR_PER_SQFT_PREMIUM: 12,    // premium per sqft over 100 sqft
   ENTRY_DOOR_BASE: 850,
   ENTRY_DOOR_DOUBLE_PREMIUM: 600,
-  WINDOW_PER_SQFT: 75,                 // standard fixed/hung
-  WINDOW_TWO_STORY_WALL_PER_SQFT: 110, // signature look — large 2-story window walls
+  WINDOW_PER_SQFT: 75,                   // standard fixed/hung
+  WINDOW_TWO_STORY_WALL_PER_SQFT: 110,   // signature look — large 2-story window walls
 
   // ────────────────────────────────────────────────────────────────────
   // Additions — placeholder ballparks
@@ -95,34 +136,22 @@ export const PRICING = {
   PORCH_PER_SQFT: 35,
   LEAN_TO_PER_SQFT: 28,
   CARPORT_PER_SQFT: 25,
-  TIMBER_ON_STONE_POST_UPCHARGE: 850,  // per post for premium post style
+  TIMBER_ON_STONE_POST_UPCHARGE: 850,    // per post for premium post style
   MEZZANINE_PER_SQFT: 45,
 
   // ────────────────────────────────────────────────────────────────────
   // Interior (residential finish-out) — placeholder
   // ────────────────────────────────────────────────────────────────────
-  RESIDENTIAL_FINISH_PER_HEATED_SQFT: 95,    // drywall/floor/HVAC/electrical/plumbing rough
+  RESIDENTIAL_FINISH_PER_HEATED_SQFT: 95,   // drywall/floor/HVAC/electrical/plumbing rough
   BATHROOM_BASE: 6500,
   VAULTED_CEILING_PREMIUM_PER_SQFT: 8,
-
-  // ────────────────────────────────────────────────────────────────────
-  // Exterior siding — per sqft of WALL AREA (perimeter × eave height)
-  // Calibrated so SHELL + ROOF + (vertical-metal) SIDING ≈ $14/sqft
-  // ────────────────────────────────────────────────────────────────────
-  SIDING_VERTICAL_METAL_PER_SQFT: 4.00,
-  SIDING_BOARD_AND_BATTEN_PER_SQFT: 7.00,
-  SIDING_WOOD_CEDAR_ACCENT_PER_SQFT: 12.00,
-  CEDAR_ACCENT_LUMP_SUM: 2200,
-  INSULATION_VINYL_FACED_FIBERGLASS_PER_SQFT: 1.50,
-  INSULATION_SPRAY_FOAM_PER_SQFT: 4.25,
-  INSULATION_IMP_PER_SQFT: 6.50,
 
   // ────────────────────────────────────────────────────────────────────
   // Engineering (PE seal — site-specific; rough placeholder)
   // ────────────────────────────────────────────────────────────────────
   ENGINEERING_FEE_BASE: 3500,
   ENGINEERING_FEE_PER_SQFT: 0.50,
-  WIND_PREMIUM_OVER_160MPH_PCT: 0.05,   // 5% premium when design wind ≥ 160 mph
+  WIND_PREMIUM_OVER_160MPH_PCT: 0.05,    // 5% premium when design wind ≥ 160 mph
 
   // ────────────────────────────────────────────────────────────────────
   // Regional adjustment — multiplied against the line-item subtotal

@@ -36,6 +36,16 @@ export interface BuildingShell {
   numberOfBays: number;        // derived from length / baySpacingFt
   stories: 1 | 2;
   clearSpan: boolean;          // true = no interior support columns
+  /**
+   * Enclosed = walls all around (barndominium / workshop / garage).
+   * Open = roof only, no walls (ag / equipment cover / hay barn).
+   *
+   * This is the PRIMARY pricing driver — open pole barns price by the
+   * tiered kit+labor rate (roof included), enclosed buildings price by
+   * the $14/sqft rule (walls + roof + labor combined). See
+   * lib/config/pricing.config.ts for the rates.
+   */
+  enclosed: boolean;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -53,6 +63,11 @@ export interface RoofConfig {
   pitch: RoofPitch;
   eaveOverhangIn: number;
   gableOverhangIn: number;
+  /**
+   * Roof material is bundled into the base building cost (exposed-fastener
+   * metal is the included default). Standing-seam and shingle add a small
+   * per-sqft premium over that baseline.
+   */
   material: RoofMaterial;
 }
 
@@ -142,13 +157,17 @@ export interface InteriorConfig {
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// Exterior finishes
+// Exterior finishes — only meaningful when shell.enclosed = true
 // ──────────────────────────────────────────────────────────────────────────
 
 export type SidingType = "vertical-metal" | "board-and-batten" | "wood-cedar-accent";
 export type InsulationType = "none" | "vinyl-faced-fiberglass" | "spray-foam" | "imp";
 
 export interface ExteriorFinishConfig {
+  /**
+   * Vertical metal is bundled into the enclosed $14/sqft base. Board-and-
+   * batten and wood-cedar add per-sqft premiums over that baseline.
+   */
   sidingType: SidingType;
   sidingColor: string;          // hex or named color; UI converts as needed
   trimColor: string;
@@ -182,6 +201,12 @@ export interface SiteHazardConfig {
   exposureCategory: ExposureCategory;
   riskCategory: RiskCategory;
   meanRoofHeightFt: number;     // derived from eave + roof pitch
+  /**
+   * ASCE 7 enclosure class for the wind calc — closely related to but
+   * distinct from shell.enclosed (which is the customer-facing "are there
+   * walls" intent). A wall building with large openings might still be
+   * "partially-enclosed" for the wind calc.
+   */
   enclosureClassification: EnclosureClassification;
   groundSnowLoadPsf: number;    // ~0 for FL
   soilBearingPsf?: number;
@@ -235,13 +260,14 @@ export const DEFAULT_BUILDING_CONFIG: BuildingConfig = {
     numberOfBays: 5,
     stories: 1,
     clearSpan: true,
+    enclosed: true,   // most customers want barndominium / workshop / garage
   },
   roof: {
     profile: "gable",
     pitch: "5:12",
     eaveOverhangIn: 12,
     gableOverhangIn: 12,
-    material: "standing-seam-metal",
+    material: "exposed-fastener-metal",   // the bundled standard
   },
   foundation: {
     type: "slab",
@@ -266,7 +292,7 @@ export const DEFAULT_BUILDING_CONFIG: BuildingConfig = {
     vaultedCeiling: false,
   },
   exteriorFinish: {
-    sidingType: "vertical-metal",
+    sidingType: "vertical-metal",   // bundled standard for enclosed
     sidingColor: "charcoal",
     trimColor: "white",
     cedarAccents: false,

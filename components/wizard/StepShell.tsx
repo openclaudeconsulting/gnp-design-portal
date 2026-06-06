@@ -19,6 +19,26 @@ export function StepShell() {
         80 ft (above that, the steel truss spec jumps tiers).
       </p>
 
+      {/* ── Enclosed vs Open — primary price driver ─────────────── */}
+      <ToggleGroup
+        label="Wall enclosure"
+        value={s.enclosed ? "enclosed" : "open"}
+        onChange={(v) => patchShell({ enclosed: v === "enclosed" })}
+        options={[
+          {
+            value: "enclosed",
+            label: "Enclosed",
+            desc: "Walls + roof — barndominium, workshop, garage ($14/sqft base)",
+          },
+          {
+            value: "open",
+            label: "Open pole barn",
+            desc: "Roof only, no walls — ag / equipment / hay cover ($6.55-$7.50/sqft base)",
+          },
+        ]}
+        columns={2}
+      />
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <NumberInput
           label="Width"
@@ -84,7 +104,7 @@ export function StepShell() {
           {
             value: 2,
             label: "Two-story",
-            desc: "Adds upper floor + heavier engineering",
+            desc: "Adds upper floor + heavier engineering (×1.75 base)",
           },
         ]}
         columns={2}
@@ -96,6 +116,15 @@ export function StepShell() {
         onChange={(v) => patchShell({ clearSpan: v })}
         hint="GNP's signature: open floor plan with no center posts. Adds a per-sqft premium; required for the wide-open great-room look."
       />
+
+      {!s.enclosed && (
+        <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">
+          <strong className="text-amber-300">Open pole barn selected.</strong>{" "}
+          Roof sheets and labor to install them are included in the base
+          building rate. Siding, insulation, and interior finish steps will
+          not affect the quote (no walls to put them on).
+        </div>
+      )}
     </div>
   );
 }

@@ -5,6 +5,18 @@
  * region from lib/services/site-hazard.ts. Returns an itemized breakdown +
  * a ballpark LOW–HIGH range.
  *
+ * Pricing model (see pricing.config.ts header for the full rationale):
+ *   - One BASE BUILDING line item bundles kit + labor + ROOF.
+ *     - Open: tiered $6.55-$7.50/sqft of footprint
+ *     - Enclosed: $14/sqft of footprint (includes walls + roof)
+ *   - Roof MATERIAL upgrades (standing-seam, shingle) add a per-sqft
+ *     premium over the bundled exposed-fastener default — not a separate
+ *     base price.
+ *   - Siding MATERIAL upgrades (board-and-batten, wood-cedar) add a
+ *     per-sqft wall-area premium over the bundled vertical-metal default.
+ *     Only applied when shell.enclosed = true.
+ *   - Insulation only applies when shell.enclosed = true.
+ *
  * NEVER present the result as a firm contract price. See DISCLAIMERS.QUOTE.
  */
 
@@ -31,37 +43,103 @@ export interface QuoteBreakdown {
 
 export function buildQuote(config: BuildingConfig): QuoteBreakdown {
   const footprintSqFt = config.shell.widthFt * config.shell.lengthFt;
+  const wallSqFt =
+    2 * (config.shell.widthFt + config.shell.lengthFt) *
+    config.shell.eaveHeightFt;
   const items: QuoteLineItem[] = [];
 
-  // ─── Shell ──────────────────────────────────────────────────────
-  const shellPerSqFt =
-    config.shell.stories === 2
-      ? PRICING.STEEL_PER_SQFT_2STORY
-      : PRICING.STEEL_PER_SQFT_1STORY;
-  let shellCost = shellPerSqFt * footprintSqFt * config.shell.stories;
+  // ─── Base building (kit + labor + roof, plus walls if enclosed) ──
+  const enclosed = config.shell.enclosed;
+  let baseRate: number;
+  if (enclosed) {
+    baseRate = PRICING.ENCLOSED_BUILDING_PER_SQFT;
+  } else {
+    if (config.shell.widthFt <= 40) {
+      baseRate = PRICING.OPEN_BUILDING_PER_SQFT_SMALL;
+    } else if (config.shell.widthFt <= 60) {
+      baseRate = PRICING.OPEN_BUILDING_PER_SQFT_MEDIUM;
+    } else {
+      baseRate = PRICING.OPEN_BUILDING_PER_SQFT_LARGE;
+    }
+  }
+  let buildingCost = baseRate * footprintSqFt;
+  if (config.shell.stories === 2) {
+    buildingCost *= PRICING.TWO_STORY_MULTIPLIER;
+  }
   if (config.shell.clearSpan) {
-    shellCost += PRICING.CLEAR_SPAN_PREMIUM_PER_SQFT * footprintSqFt;
+    buildingCost += PRICING.CLEAR_SPAN_PREMIUM_PER_SQFT * footprintSqFt;
   }
   items.push({
-    label: `Steel shell (${config.shell.widthFt}×${config.shell.lengthFt}×${config.shell.eaveHeightFt}, ${config.shell.stories}-story)`,
-    amount: round(shellCost),
+    label: enclosed
+      ? `Enclosed building (${config.shell.widthFt}×${config.shell.lengthFt}×${config.shell.eaveHeightFt}, ${config.shell.stories}-story — kit + labor + roof + walls)`
+      : `Open pole barn (${config.shell.widthFt}×${config.shell.lengthFt}×${config.shell.eaveHeightFt}, ${config.shell.stories}-story — kit + labor + roof, no walls)`,
+    amount: round(buildingCost),
+    notes: config.shell.clearSpan ? "Includes clear-span truss premium" : undefined,
   });
 
-  // ─── Roof ───────────────────────────────────────────────────────
-  const pitchFactor = PRICING.PITCH_TO_ROOF_FACTOR[config.roof.pitch] ?? 1.083;
+  // ─── Roof material premium (over bundled exposed-fastener default) ─
+  const pitchFactor =
+    PRICING.PITCH_TO_ROOF_FACTOR[config.roof.pitch] ?? 1.083;
   const roofSqFt = footprintSqFt * pitchFactor;
-  const roofRate =
-    config.roof.material === "standing-seam-metal"
-      ? PRICING.ROOF_STANDING_SEAM_PER_SQFT
-      : config.roof.material === "exposed-fastener-metal"
-        ? PRICING.ROOF_EXPOSED_FASTENER_PER_SQFT
-        : PRICING.ROOF_SHINGLE_PER_SQFT;
-  items.push({
-    label: `Roof (${config.roof.material}, ${config.roof.pitch})`,
-    amount: round(roofRate * roofSqFt),
-  });
+  let roofPremium = 0;
+  if (config.roof.material === "standing-seam-metal") {
+    roofPremium = PRICING.ROOF_PREMIUM_STANDING_SEAM_PER_SQFT_ROOF;
+  } else if (config.roof.material === "shingle") {
+    roofPremium = PRICING.ROOF_PREMIUM_SHINGLE_PER_SQFT_ROOF;
+  }
+  // exposed-fastener-metal = $0 premium (bundled default)
+  if (roofPremium > 0) {
+    items.push({
+      label: `Roof material upgrade (${config.roof.material}, ${config.roof.pitch})`,
+      amount: round(roofPremium * roofSqFt),
+      notes: "Premium over the bundled exposed-fastener metal roof",
+    });
+  }
 
-  // ─── Foundation ─────────────────────────────────────────────────
+  // ─── Siding material premium (only for enclosed builds) ──────────
+  if (enclosed) {
+    let sidingPremium = 0;
+    if (config.exteriorFinish.sidingType === "board-and-batten") {
+      sidingPremium = PRICING.SIDING_PREMIUM_BOARD_AND_BATTEN_PER_SQFT_WALL;
+    } else if (config.exteriorFinish.sidingType === "wood-cedar-accent") {
+      sidingPremium = PRICING.SIDING_PREMIUM_WOOD_CEDAR_PER_SQFT_WALL;
+    }
+    // vertical-metal = $0 premium (bundled default)
+    if (sidingPremium > 0) {
+      items.push({
+        label: `Siding upgrade (${config.exteriorFinish.sidingType})`,
+        amount: round(sidingPremium * wallSqFt),
+        notes: "Premium over the bundled vertical-metal siding",
+      });
+    }
+    if (config.exteriorFinish.cedarAccents) {
+      items.push({
+        label: `Cedar accent pieces${
+          config.exteriorFinish.cedarAccentLocations?.length
+            ? ` (${config.exteriorFinish.cedarAccentLocations.join(", ")})`
+            : ""
+        }`,
+        amount: PRICING.CEDAR_ACCENT_LUMP_SUM,
+      });
+    }
+  }
+
+  // ─── Insulation (only for enclosed builds) ────────────────────────
+  if (enclosed && config.exteriorFinish.insulation !== "none") {
+    const insulationRate =
+      config.exteriorFinish.insulation === "vinyl-faced-fiberglass"
+        ? PRICING.INSULATION_VINYL_FACED_FIBERGLASS_PER_SQFT
+        : config.exteriorFinish.insulation === "spray-foam"
+          ? PRICING.INSULATION_SPRAY_FOAM_PER_SQFT
+          : PRICING.INSULATION_IMP_PER_SQFT;
+    // Walls + ceiling (ceiling ≈ footprint for a single-story)
+    items.push({
+      label: `Insulation (${config.exteriorFinish.insulation})`,
+      amount: round(insulationRate * (wallSqFt + footprintSqFt)),
+    });
+  }
+
+  // ─── Foundation ──────────────────────────────────────────────────
   if (config.foundation.type === "slab") {
     const slabRate =
       config.foundation.slabThicknessIn === 6
@@ -91,7 +169,7 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
     });
   }
 
-  // ─── Openings ───────────────────────────────────────────────────
+  // ─── Openings ────────────────────────────────────────────────────
   let openingsCost = 0;
   for (const d of config.openings.overheadDoors) {
     const sqFt = d.widthFt * d.heightFt;
@@ -121,7 +199,7 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
     });
   }
 
-  // ─── Additions ──────────────────────────────────────────────────
+  // ─── Additions ───────────────────────────────────────────────────
   let additionsCost = 0;
   for (const p of config.additions.porches) {
     const rate =
@@ -137,16 +215,19 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
     }
   }
   if (config.additions.mezzanine.enabled) {
-    additionsCost += PRICING.MEZZANINE_PER_SQFT * config.additions.mezzanine.areaSqFt;
+    additionsCost +=
+      PRICING.MEZZANINE_PER_SQFT * config.additions.mezzanine.areaSqFt;
   }
   if (additionsCost > 0) {
     items.push({
-      label: `Additions (${config.additions.porches.length} porch/lean-to, mezzanine: ${config.additions.mezzanine.enabled ? "yes" : "no"})`,
+      label: `Additions (${config.additions.porches.length} porch/lean-to, mezzanine: ${
+        config.additions.mezzanine.enabled ? "yes" : "no"
+      })`,
       amount: round(additionsCost),
     });
   }
 
-  // ─── Interior finish ────────────────────────────────────────────
+  // ─── Interior finish (residential build-out) ─────────────────────
   if (config.interior.heatedSqFt > 0) {
     let interiorCost =
       PRICING.RESIDENTIAL_FINISH_PER_HEATED_SQFT * config.interior.heatedSqFt;
@@ -161,36 +242,10 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
     });
   }
 
-  // ─── Exterior finish ────────────────────────────────────────────
-  const wallSqFt =
-    2 * (config.shell.widthFt + config.shell.lengthFt) * config.shell.eaveHeightFt;
-  const sidingRate =
-    config.exteriorFinish.sidingType === "vertical-metal"
-      ? PRICING.SIDING_VERTICAL_METAL_PER_SQFT
-      : config.exteriorFinish.sidingType === "board-and-batten"
-        ? PRICING.SIDING_BOARD_AND_BATTEN_PER_SQFT
-        : PRICING.SIDING_WOOD_CEDAR_ACCENT_PER_SQFT;
-  let exteriorCost = sidingRate * wallSqFt;
-  if (config.exteriorFinish.cedarAccents) {
-    exteriorCost += PRICING.CEDAR_ACCENT_LUMP_SUM;
-  }
-  if (config.exteriorFinish.insulation !== "none") {
-    const insulationRate =
-      config.exteriorFinish.insulation === "vinyl-faced-fiberglass"
-        ? PRICING.INSULATION_VINYL_FACED_FIBERGLASS_PER_SQFT
-        : config.exteriorFinish.insulation === "spray-foam"
-          ? PRICING.INSULATION_SPRAY_FOAM_PER_SQFT
-          : PRICING.INSULATION_IMP_PER_SQFT;
-    exteriorCost += insulationRate * (wallSqFt + footprintSqFt);
-  }
-  items.push({
-    label: `Exterior finish (${config.exteriorFinish.sidingType}, ${config.exteriorFinish.insulation} insulation)`,
-    amount: round(exteriorCost),
-  });
-
-  // ─── Engineering (PE seal) ──────────────────────────────────────
+  // ─── Engineering (PE seal) ───────────────────────────────────────
   let engineeringFee =
-    PRICING.ENGINEERING_FEE_BASE + PRICING.ENGINEERING_FEE_PER_SQFT * footprintSqFt;
+    PRICING.ENGINEERING_FEE_BASE +
+    PRICING.ENGINEERING_FEE_PER_SQFT * footprintSqFt;
   if ((config.site?.designWindSpeedMph ?? 0) >= 160) {
     engineeringFee *= 1 + PRICING.WIND_PREMIUM_OVER_160MPH_PCT;
   }
@@ -200,7 +255,7 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
     notes: "Final fee confirmed by PE.",
   });
 
-  // ─── Subtotal + region multiplier + ballpark range ──────────────
+  // ─── Subtotal + region multiplier + ballpark range ───────────────
   const subtotal = items.reduce((s, it) => s + it.amount, 0);
 
   const region =
