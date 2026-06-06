@@ -6,7 +6,7 @@
  * real DOM / WebGL context).
  */
 
-import { OrbitControls, Sky } from "@react-three/drei";
+import { Environment, OrbitControls, Sky } from "@react-three/drei";
 import { Canvas } from "@react-three/fiber";
 import { Suspense } from "react";
 
@@ -61,6 +61,12 @@ export default function VisualizationCanvas({ config }: Props) {
         mieCoefficient={0.005}
         mieDirectionalG={0.8}
       />
+
+      {/* HDR environment — gives the metal surfaces something to reflect
+          (sky, trees, ground). Without this metalness ≠ shiny — PBR
+          metal needs an env map to sample. background={false} so the
+          procedural Sky above stays the visible backdrop. */}
+      <Environment preset="park" background={false} environmentIntensity={0.9} />
 
       {/* Horizon fog — matches a hazy outdoor day so distant edges fade
           softly instead of clipping hard against the sky */}

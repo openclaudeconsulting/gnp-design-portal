@@ -20,6 +20,8 @@ import type {
   BuildingConfig,
   OverheadDoor,
   EntryDoor,
+  RoofMaterial,
+  SidingType,
   Window as Wnd,
   Porch,
   Wall,
@@ -31,6 +33,46 @@ import {
   makeRoofGeometry,
   ROOF_CONSTANTS,
 } from "./roofGeometry";
+
+// ── Material lookups ────────────────────────────────────────────────────
+// PBR (metalness/roughness) properties per material type. With an HDR
+// environment in the scene, metalness > 0 makes the surface reflective.
+// Without an env map this is just lighting modulation. drei's
+// <Environment> in VisualizationCanvas provides the env map.
+
+interface PbrProps {
+  color: string;
+  metalness: number;
+  roughness: number;
+}
+
+function roofMaterialProps(material: RoofMaterial, baseHex: string): PbrProps {
+  switch (material) {
+    case "standing-seam-metal":
+      // Clean factory-finish steel panels — strongest reflection
+      return { color: baseHex, metalness: 0.88, roughness: 0.22 };
+    case "exposed-fastener-metal":
+      // Ribbed/corrugated metal — slightly more diffuse from ridges
+      return { color: baseHex, metalness: 0.78, roughness: 0.4 };
+    case "shingle":
+      // Asphalt shingles are essentially non-metallic, matte
+      return { color: "#3a3530", metalness: 0.04, roughness: 0.85 };
+  }
+}
+
+function wallMaterialProps(siding: SidingType, baseHex: string): PbrProps {
+  switch (siding) {
+    case "vertical-metal":
+      // Painted steel panel siding
+      return { color: baseHex, metalness: 0.78, roughness: 0.32 };
+    case "board-and-batten":
+      // Painted wood — no metal sheen, more diffuse
+      return { color: baseHex, metalness: 0.04, roughness: 0.72 };
+    case "wood-cedar-accent":
+      // Stained cedar — barely-there sheen
+      return { color: baseHex, metalness: 0.03, roughness: 0.62 };
+  }
+}
 
 interface Props {
   config: BuildingConfig;
@@ -72,8 +114,17 @@ export function BuildingMesh({ config }: Props) {
   // Roof color — Phase 2.3+ will read a roof-color field from config.
   // For now use a standard dark metal.
   const roofHex = "#2a2a2e";
-  const postHex = "#27272a";
   const slabHex = "#71717a";
+
+  // PBR material props per surface type (env map provides reflections)
+  const wallMat = wallMaterialProps(exteriorFinish.sidingType, sidingHex);
+  const roofMat = roofMaterialProps(roof.material, roofHex);
+  // Bay posts — painted steel, slight sheen
+  const postMat: PbrProps = {
+    color: "#3a3a40",
+    metalness: 0.85,
+    roughness: 0.35,
+  };
 
   // Ground sizing — large enough that the customer never sees the edge
   // when orbiting around a 60×80 building. Cleared dirt pad (cleared
@@ -120,34 +171,38 @@ export function BuildingMesh({ config }: Props) {
           <mesh position={[0, h / 2, -L / 2]} castShadow receiveShadow>
             <boxGeometry args={[w, h, 0.3]} />
             <meshStandardMaterial
-              color={sidingHex}
-              metalness={0.45}
-              roughness={0.55}
+              color={wallMat.color}
+              metalness={wallMat.metalness}
+              roughness={wallMat.roughness}
+              envMapIntensity={1.1}
             />
           </mesh>
           <mesh position={[0, h / 2, L / 2]} castShadow receiveShadow>
             <boxGeometry args={[w, h, 0.3]} />
             <meshStandardMaterial
-              color={sidingHex}
-              metalness={0.45}
-              roughness={0.55}
+              color={wallMat.color}
+              metalness={wallMat.metalness}
+              roughness={wallMat.roughness}
+              envMapIntensity={1.1}
             />
           </mesh>
           {/* Side walls (left + right, along Z axis) */}
           <mesh position={[-w / 2, h / 2, 0]} castShadow receiveShadow>
             <boxGeometry args={[0.3, h, L]} />
             <meshStandardMaterial
-              color={sidingHex}
-              metalness={0.45}
-              roughness={0.55}
+              color={wallMat.color}
+              metalness={wallMat.metalness}
+              roughness={wallMat.roughness}
+              envMapIntensity={1.1}
             />
           </mesh>
           <mesh position={[w / 2, h / 2, 0]} castShadow receiveShadow>
             <boxGeometry args={[0.3, h, L]} />
             <meshStandardMaterial
-              color={sidingHex}
-              metalness={0.45}
-              roughness={0.55}
+              color={wallMat.color}
+              metalness={wallMat.metalness}
+              roughness={wallMat.roughness}
+              envMapIntensity={1.1}
             />
           </mesh>
 
@@ -160,9 +215,10 @@ export function BuildingMesh({ config }: Props) {
             >
               <shapeGeometry args={[gableEndShape]} />
               <meshStandardMaterial
-                color={sidingHex}
-                metalness={0.45}
-                roughness={0.55}
+                color={wallMat.color}
+                metalness={wallMat.metalness}
+                roughness={wallMat.roughness}
+                envMapIntensity={1.1}
                 side={THREE.DoubleSide}
               />
             </mesh>
@@ -178,9 +234,10 @@ export function BuildingMesh({ config }: Props) {
         receiveShadow
       >
         <meshStandardMaterial
-          color={roofHex}
-          metalness={0.6}
-          roughness={0.4}
+          color={roofMat.color}
+          metalness={roofMat.metalness}
+          roughness={roofMat.roughness}
+          envMapIntensity={1.3}
           side={THREE.DoubleSide}
         />
       </mesh>
@@ -190,9 +247,10 @@ export function BuildingMesh({ config }: Props) {
         <mesh key={`post-${i}`} position={pos} castShadow>
           <boxGeometry args={[0.55, h, 0.55]} />
           <meshStandardMaterial
-            color={postHex}
-            metalness={0.7}
-            roughness={0.5}
+            color={postMat.color}
+            metalness={postMat.metalness}
+            roughness={postMat.roughness}
+            envMapIntensity={0.9}
           />
         </mesh>
       ))}
