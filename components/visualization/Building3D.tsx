@@ -75,16 +75,36 @@ export function BuildingMesh({ config }: Props) {
   const postHex = "#27272a";
   const slabHex = "#71717a";
 
+  // Ground sizing — large enough that the customer never sees the edge
+  // when orbiting around a 60×80 building. Cleared dirt pad (cleared
+  // build site) sits directly under the footprint with a slight halo;
+  // grass ring extends beyond that to the horizon.
+  const dirtPadW = w + 30;
+  const dirtPadL = L + 30;
+  const grassExtent = Math.max(w, L) * 8;
+
   return (
     <group>
-      {/* Ground reference — large dark plane */}
+      {/* Far ground — natural grass / pasture extending to the horizon */}
+      <mesh
+        position={[0, -0.12, 0]}
+        receiveShadow
+        rotation={[-Math.PI / 2, 0, 0]}
+      >
+        <planeGeometry args={[grassExtent, grassExtent]} />
+        <meshStandardMaterial color="#6a7b4a" roughness={1} />
+      </mesh>
+
+      {/* Cleared dirt pad — where the building sits (resembles cleared land
+          ready for the build, what the customer would actually see on
+          their property after site prep) */}
       <mesh
         position={[0, -0.05, 0]}
         receiveShadow
         rotation={[-Math.PI / 2, 0, 0]}
       >
-        <planeGeometry args={[w * 3, L * 3]} />
-        <meshStandardMaterial color="#0e0e10" />
+        <planeGeometry args={[dirtPadW, dirtPadL]} />
+        <meshStandardMaterial color="#8a6e4b" roughness={1} />
       </mesh>
 
       {/* Foundation slab (visible footprint) */}
