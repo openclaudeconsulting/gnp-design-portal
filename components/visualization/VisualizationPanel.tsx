@@ -2,12 +2,12 @@
 
 /**
  * The always-visible visualization pane that lives on the left of the
- * wizard. Has a tab toggle for 3D view (Phase 2.1) and 2D floor plan
- * editor (Phase 2.3, currently a "Coming next" stub).
+ * wizard. Has a tab toggle for 3D view (procedural three.js) and 2D
+ * floor plan editor (interactive react-konva canvas).
  *
- * The 3D canvas is loaded dynamically with ssr: false because three.js
- * needs a real DOM + WebGL context — static-exported HTML can't render it
- * server-side.
+ * Both canvases are loaded via next/dynamic with ssr:false because
+ * three.js and konva both need a real DOM — static-exported HTML can't
+ * render them server-side.
  */
 
 import dynamic from "next/dynamic";
@@ -27,11 +27,21 @@ const VisualizationCanvas = dynamic(
   },
 );
 
+const FloorPlanEditor = dynamic(() => import("./FloorPlanEditor"), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-full flex items-center justify-center text-zinc-500 text-sm">
+      Loading 2D floor plan editor…
+    </div>
+  ),
+});
+
 type ViewMode = "3d" | "2d";
 
 export function VisualizationPanel() {
   const { config } = useWizard();
   const [view, setView] = useState<ViewMode>("3d");
+  const roomCount = config.floorPlan.rooms.length;
 
   return (
     <div className="bg-zinc-900 border border-zinc-800 rounded-lg overflow-hidden flex flex-col h-full min-h-[400px]">
@@ -47,7 +57,7 @@ export function VisualizationPanel() {
             label="2D Floor Plan"
             active={view === "2d"}
             onClick={() => setView("2d")}
-            badge="next"
+            badge={roomCount > 0 ? `${roomCount}` : undefined}
           />
         </div>
         <div className="text-[10px] text-zinc-500 hidden sm:block font-mono">
@@ -61,7 +71,7 @@ export function VisualizationPanel() {
         {view === "3d" ? (
           <VisualizationCanvas config={config} />
         ) : (
-          <FloorPlanComingSoon />
+          <FloorPlanEditor />
         )}
       </div>
 
@@ -74,7 +84,12 @@ export function VisualizationPanel() {
             <span className="text-zinc-400">right-click drag</span> pan
           </>
         ) : (
-          <>Phase 2.3 — click to add rooms, drag walls to resize</>
+          <>
+            <span className="text-zinc-400">Click</span> a room type, then{" "}
+            <span className="text-zinc-400">click inside the building</span> to
+            place it · drag rooms to move · drag handles to resize ·{" "}
+            <span className="text-zinc-400">Delete</span> key to remove
+          </>
         )}
       </div>
     </div>
@@ -105,30 +120,17 @@ function TabButton({
     >
       {label}
       {badge && (
-        <span className="text-[9px] uppercase tracking-wider text-amber-500/80 bg-amber-500/10 px-1 py-0.5 rounded">
+        <span
+          className={[
+            "text-[9px] font-mono px-1.5 py-0.5 rounded",
+            active
+              ? "bg-amber-500/30 text-amber-100"
+              : "bg-zinc-800 text-zinc-400",
+          ].join(" ")}
+        >
           {badge}
         </span>
       )}
     </button>
-  );
-}
-
-function FloorPlanComingSoon() {
-  return (
-    <div className="w-full h-full flex items-center justify-center text-center px-6 bg-zinc-950/40">
-      <div>
-        <div className="text-xs uppercase tracking-wider text-amber-500/80 font-semibold mb-2">
-          Coming next
-        </div>
-        <p className="text-base text-zinc-300 font-medium">
-          2D floor plan editor
-        </p>
-        <p className="mt-2 text-xs text-zinc-500 max-w-xs mx-auto leading-relaxed">
-          Click to add rooms (bedroom, bathroom, kitchen). Drag wall corners
-          and edges to resize. Solid lines for walls, dashed lines for
-          doorways and archways. Lands in Phase 2.3.
-        </p>
-      </div>
-    </div>
   );
 }

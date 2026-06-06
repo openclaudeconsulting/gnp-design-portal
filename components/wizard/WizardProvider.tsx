@@ -5,7 +5,11 @@
  *
  * Every step is a client component that reads from / writes to this context.
  * The `derive()` helper keeps internal-consistency fields (peakHeightFt,
- * numberOfBays, meanRoofHeightFt) in sync on every change.
+ * numberOfBays, meanRoofHeightFt) in sync on every change. When the
+ * customer-drawn floor plan has rooms, derive() ALSO computes interior
+ * heatedSqFt / bedrooms / bathrooms from the room list — so the quote
+ * engine + the Review summary read the same numbers regardless of
+ * whether the customer used the manual interior inputs or the 2D editor.
  */
 
 import {
@@ -25,6 +29,10 @@ import {
   buildQuote,
   type QuoteBreakdown,
 } from "@/lib/services/quote-engine";
+import {
+  clampRoomToBuilding,
+  deriveInterior,
+} from "@/lib/services/floor-plan-utils";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Step list (single source of truth for the wizard chrome)
@@ -48,15 +56,6 @@ export type StepId = (typeof STEPS)[number]["id"];
 // Derived-field maintenance
 // ──────────────────────────────────────────────────────────────────────────
 
-/**
- * Recompute fields whose value follows from other inputs:
- *  - peakHeightFt   = eaveHeight + (width / 2) × roof slope
- *  - numberOfBays   = round(length / baySpacing)
- *  - meanRoofHeight = (eave + peak) / 2  (used by the wind-load calc)
- *
- * Keeps the BuildingConfig internally consistent so the quote engine and the
- * eventual PE submittal never read stale derived values.
- */
 function derive(c: BuildingConfig): BuildingConfig {
   const [rise, run] = c.roof.pitch.split(":").map(Number);
   const slope = rise / Math.max(1, run);
@@ -72,10 +71,33 @@ function derive(c: BuildingConfig): BuildingConfig {
     (c.shell.eaveHeightFt + peakHeightFt) /
     2
   ).toFixed(1);
+
+  // Clamp every room to the (possibly shrunken) building footprint so a
+  // shell-size change can't leave rooms hanging off the edge.
+  const clampedRooms = c.floorPlan.rooms.map((r) =>
+    clampRoomToBuilding(r, c.shell.widthFt, c.shell.lengthFt),
+  );
+  const floorPlan = { ...c.floorPlan, rooms: clampedRooms };
+
+  // Derive interior from the floor plan IF the customer has drawn rooms.
+  // Otherwise leave the manual interior values alone.
+  let interior = c.interior;
+  if (clampedRooms.length > 0) {
+    const derived = deriveInterior(floorPlan);
+    interior = {
+      ...c.interior,
+      heatedSqFt: derived.heatedSqFt,
+      bedrooms: derived.bedrooms,
+      bathrooms: derived.bathrooms,
+    };
+  }
+
   return {
     ...c,
     shell: { ...c.shell, peakHeightFt, numberOfBays },
     site: { ...c.site, meanRoofHeightFt },
+    floorPlan,
+    interior,
   };
 }
 
@@ -98,6 +120,7 @@ interface WizardContextValue {
   patchExteriorFinish: (patch: Partial<BuildingConfig["exteriorFinish"]>) => void;
   patchSite:           (patch: Partial<BuildingConfig["site"]>) => void;
   patchCustomer:       (patch: Partial<BuildingConfig["customer"]>) => void;
+  patchFloorPlan:      (patch: Partial<BuildingConfig["floorPlan"]>) => void;
   /** Live, memoized quote. */
   quote: QuoteBreakdown;
   stepIndex: number;
@@ -187,6 +210,12 @@ export function WizardProvider({ children }: { children: ReactNode }) {
     },
     [setConfig],
   );
+  const patchFloorPlan = useCallback(
+    (patch: Partial<BuildingConfig["floorPlan"]>) => {
+      setConfig((c) => ({ ...c, floorPlan: { ...c.floorPlan, ...patch } }));
+    },
+    [setConfig],
+  );
 
   const quote = useMemo(() => buildQuote(config), [config]);
 
@@ -210,6 +239,7 @@ export function WizardProvider({ children }: { children: ReactNode }) {
         patchExteriorFinish,
         patchSite,
         patchCustomer,
+        patchFloorPlan,
         quote,
         stepIndex,
         setStepIndex,

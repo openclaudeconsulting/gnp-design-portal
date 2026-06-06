@@ -9,12 +9,32 @@ export function StepInterior() {
   const footprintSqFt = config.shell.widthFt * config.shell.lengthFt;
   const maxHeated = footprintSqFt * (config.shell.stories === 2 ? 2 : 1);
 
+  const roomCount = config.floorPlan.rooms.length;
+  const usingFloorPlan = roomCount > 0;
+
   return (
     <div className="space-y-6">
-      <p className="text-sm text-zinc-400">
-        For residential-finished buildings, enter the heated/conditioned area
-        and room counts. Leave heated sqft at 0 for an ag/storage shell.
-      </p>
+      {usingFloorPlan ? (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-200/90">
+          <strong className="text-amber-300">
+            Reading from your floor plan ({roomCount} room
+            {roomCount !== 1 ? "s" : ""}).
+          </strong>{" "}
+          The values below are computed from the rooms you've drawn on the
+          2D Floor Plan tab — changing them here would be overwritten on
+          the next floor-plan update. To adjust counts or area, edit the
+          rooms in the 2D editor.
+        </div>
+      ) : (
+        <p className="text-sm text-zinc-400">
+          For residential-finished buildings, enter the heated/conditioned
+          area and room counts here — OR tap{" "}
+          <span className="text-zinc-200">2D Floor Plan</span> on the
+          visualization panel to draw the rooms directly (heated sqft,
+          bedrooms, and bathrooms will be derived automatically). Leave
+          heated sqft at 0 for an ag/storage shell.
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <NumberInput
@@ -24,7 +44,11 @@ export function StepInterior() {
           max={maxHeated}
           value={i.heatedSqFt}
           onChange={(v) => patchInterior({ heatedSqFt: v })}
-          hint={`Footprint: ${footprintSqFt.toLocaleString()} sqft × ${config.shell.stories} story`}
+          hint={
+            usingFloorPlan
+              ? "(derived from floor plan)"
+              : `Footprint: ${footprintSqFt.toLocaleString()} sqft × ${config.shell.stories} story`
+          }
         />
         <NumberInput
           label="Bedrooms"
@@ -32,6 +56,7 @@ export function StepInterior() {
           max={10}
           value={i.bedrooms}
           onChange={(v) => patchInterior({ bedrooms: v })}
+          hint={usingFloorPlan ? "(derived from floor plan)" : undefined}
         />
         <NumberInput
           label="Bathrooms"
@@ -40,7 +65,9 @@ export function StepInterior() {
           step={0.5}
           value={i.bathrooms}
           onChange={(v) => patchInterior({ bathrooms: v })}
-          hint="0.5 = half bath"
+          hint={
+            usingFloorPlan ? "(derived from floor plan)" : "0.5 = half bath"
+          }
         />
       </div>
 

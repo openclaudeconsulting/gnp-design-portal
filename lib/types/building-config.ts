@@ -10,6 +10,8 @@
  * or "wind-rated." A licensed PE seals each job for its specific site.
  */
 
+import { type FloorPlan, EMPTY_FLOOR_PLAN } from "./floor-plan";
+
 // ──────────────────────────────────────────────────────────────────────────
 // Job lifecycle
 // ──────────────────────────────────────────────────────────────────────────
@@ -241,6 +243,13 @@ export interface BuildingConfig {
   };
   interior: InteriorConfig;
   exteriorFinish: ExteriorFinishConfig;
+  /**
+   * Customer-drawn interior floor plan (2D editor on the visualization
+   * panel). When non-empty, the wizard derives interior.heatedSqFt /
+   * bedrooms / bathrooms from the room list. When empty, the customer's
+   * manual inputs on the Interior step are used instead.
+   */
+  floorPlan: FloorPlan;
   useType: UseType;
   site: SiteHazardConfig;
   customer: CustomerContact;
@@ -291,6 +300,7 @@ export const DEFAULT_BUILDING_CONFIG: BuildingConfig = {
     openConceptGreatRoom: false,
     vaultedCeiling: false,
   },
+  floorPlan: EMPTY_FLOOR_PLAN,
   exteriorFinish: {
     sidingType: "vertical-metal",   // bundled standard for enclosed
     sidingColor: "charcoal",
