@@ -9,18 +9,21 @@
  *   - One BASE BUILDING line item bundles kit + labor + ROOF.
  *     - Open: tiered $6.55-$7.50/sqft of footprint
  *     - Enclosed: $14/sqft of footprint (includes walls + roof)
+ *     - Mixed (some bays enclosed, some open): pro-rated by bay count
+ *       — closedCount/total of footprint priced at enclosed rate, the
+ *       rest at the open tier rate.
  *   - Roof MATERIAL upgrades (standing-seam, shingle) add a per-sqft
  *     premium over the bundled exposed-fastener default — not a separate
  *     base price.
  *   - Siding MATERIAL upgrades (board-and-batten, wood-cedar) add a
- *     per-sqft wall-area premium over the bundled vertical-metal default.
- *     Only applied when shell.enclosed = true.
- *   - Insulation only applies when shell.enclosed = true.
+ *     per-sqft wall-area premium on the ENCLOSED portion only.
+ *   - Insulation only applies to the ENCLOSED portion.
  *
  * NEVER present the result as a firm contract price. See DISCLAIMERS.QUOTE.
  */
 
 import { PRICING } from "@/lib/config/pricing.config";
+import { getEnclosureSummary } from "@/lib/services/enclosure-utils";
 import { siteHazardService } from "@/lib/services/site-hazard";
 import type { BuildingConfig } from "@/lib/types/building-config";
 
@@ -41,43 +44,74 @@ export interface QuoteBreakdown {
   windSpeedMph: number;
 }
 
+function openRateForWidth(widthFt: number): number {
+  if (widthFt <= 40) return PRICING.OPEN_BUILDING_PER_SQFT_SMALL;
+  if (widthFt <= 60) return PRICING.OPEN_BUILDING_PER_SQFT_MEDIUM;
+  return PRICING.OPEN_BUILDING_PER_SQFT_LARGE;
+}
+
 export function buildQuote(config: BuildingConfig): QuoteBreakdown {
   const footprintSqFt = config.shell.widthFt * config.shell.lengthFt;
-  const wallSqFt =
-    2 * (config.shell.widthFt + config.shell.lengthFt) *
-    config.shell.eaveHeightFt;
   const items: QuoteLineItem[] = [];
 
-  // ─── Base building (kit + labor + roof, plus walls if enclosed) ──
-  const enclosed = config.shell.enclosed;
-  let baseRate: number;
-  if (enclosed) {
-    baseRate = PRICING.ENCLOSED_BUILDING_PER_SQFT;
-  } else {
-    if (config.shell.widthFt <= 40) {
-      baseRate = PRICING.OPEN_BUILDING_PER_SQFT_SMALL;
-    } else if (config.shell.widthFt <= 60) {
-      baseRate = PRICING.OPEN_BUILDING_PER_SQFT_MEDIUM;
-    } else {
-      baseRate = PRICING.OPEN_BUILDING_PER_SQFT_LARGE;
-    }
-  }
-  let buildingCost = baseRate * footprintSqFt;
+  const enclosure = getEnclosureSummary(config.shell.bayEnclosures);
+
+  // Fraction of footprint covered by enclosed bays vs open bays.
+  // (Pro-rate by bay count — every bay has the same footprint span.)
+  const enclosedFrac =
+    enclosure.total > 0 ? enclosure.closedCount / enclosure.total : 0;
+  const openFrac = 1 - enclosedFrac;
+  const enclosedFootprint = footprintSqFt * enclosedFrac;
+  const openFootprint = footprintSqFt * openFrac;
+
+  // Wall area applies ONLY to enclosed portion — long-wall segments for
+  // enclosed bays + gable end walls if the corresponding end bay is
+  // enclosed. Approximation: scale total perimeter wall area by
+  // enclosedFrac (the long walls are perfectly bay-proportional; gable
+  // ends are a small fraction of total perimeter, so the error is tiny).
+  const fullPerimeterWallSqFt =
+    2 *
+    (config.shell.widthFt + config.shell.lengthFt) *
+    config.shell.eaveHeightFt;
+  const enclosedWallSqFt = fullPerimeterWallSqFt * enclosedFrac;
+
+  // ─── Base building (kit + labor + roof, plus walls for enclosed bays) ─
+  const openRate = openRateForWidth(config.shell.widthFt);
+  let buildingCost =
+    enclosedFootprint * PRICING.ENCLOSED_BUILDING_PER_SQFT +
+    openFootprint * openRate;
   if (config.shell.stories === 2) {
     buildingCost *= PRICING.TWO_STORY_MULTIPLIER;
   }
   if (config.shell.clearSpan) {
     buildingCost += PRICING.CLEAR_SPAN_PREMIUM_PER_SQFT * footprintSqFt;
   }
+
+  const dims = `${config.shell.widthFt}×${config.shell.lengthFt}×${config.shell.eaveHeightFt}`;
+  const storyTag = `${config.shell.stories}-story`;
+  let baseLabel: string;
+  let baseNote: string | undefined;
+  if (enclosure.fullyEnclosed) {
+    baseLabel = `Enclosed building (${dims}, ${storyTag} — kit + labor + roof + walls)`;
+  } else if (enclosure.fullyOpen) {
+    baseLabel = `Open pole barn (${dims}, ${storyTag} — kit + labor + roof, no walls)`;
+  } else {
+    baseLabel = `Mixed-enclosure building (${dims}, ${storyTag} — ${enclosure.closedCount} of ${enclosure.total} bays enclosed)`;
+    baseNote = `${enclosure.closedCount} enclosed bays @ $${PRICING.ENCLOSED_BUILDING_PER_SQFT}/sqft + ${enclosure.openCount} open bays @ $${openRate.toFixed(2)}/sqft`;
+  }
+  if (config.shell.clearSpan) {
+    baseNote = baseNote
+      ? `${baseNote} · includes clear-span truss premium`
+      : "Includes clear-span truss premium";
+  }
   items.push({
-    label: enclosed
-      ? `Enclosed building (${config.shell.widthFt}×${config.shell.lengthFt}×${config.shell.eaveHeightFt}, ${config.shell.stories}-story — kit + labor + roof + walls)`
-      : `Open pole barn (${config.shell.widthFt}×${config.shell.lengthFt}×${config.shell.eaveHeightFt}, ${config.shell.stories}-story — kit + labor + roof, no walls)`,
+    label: baseLabel,
     amount: round(buildingCost),
-    notes: config.shell.clearSpan ? "Includes clear-span truss premium" : undefined,
+    notes: baseNote,
   });
 
   // ─── Roof material premium (over bundled exposed-fastener default) ─
+  // Roof covers the WHOLE footprint regardless of enclosure.
   const pitchFactor =
     PRICING.PITCH_TO_ROOF_FACTOR[config.roof.pitch] ?? 1.083;
   const roofSqFt = footprintSqFt * pitchFactor;
@@ -87,7 +121,6 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
   } else if (config.roof.material === "shingle") {
     roofPremium = PRICING.ROOF_PREMIUM_SHINGLE_PER_SQFT_ROOF;
   }
-  // exposed-fastener-metal = $0 premium (bundled default)
   if (roofPremium > 0) {
     items.push({
       label: `Roof material upgrade (${config.roof.material}, ${config.roof.pitch})`,
@@ -96,20 +129,21 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
     });
   }
 
-  // ─── Siding material premium (only for enclosed builds) ──────────
-  if (enclosed) {
+  // ─── Siding material premium (only for enclosed portion) ─────────
+  if (enclosure.anyEnclosed) {
     let sidingPremium = 0;
     if (config.exteriorFinish.sidingType === "board-and-batten") {
       sidingPremium = PRICING.SIDING_PREMIUM_BOARD_AND_BATTEN_PER_SQFT_WALL;
     } else if (config.exteriorFinish.sidingType === "wood-cedar-accent") {
       sidingPremium = PRICING.SIDING_PREMIUM_WOOD_CEDAR_PER_SQFT_WALL;
     }
-    // vertical-metal = $0 premium (bundled default)
     if (sidingPremium > 0) {
       items.push({
         label: `Siding upgrade (${config.exteriorFinish.sidingType})`,
-        amount: round(sidingPremium * wallSqFt),
-        notes: "Premium over the bundled vertical-metal siding",
+        amount: round(sidingPremium * enclosedWallSqFt),
+        notes: enclosure.mixed
+          ? `Premium over vertical metal · applied to ${enclosure.closedCount} of ${enclosure.total} enclosed bays`
+          : "Premium over the bundled vertical-metal siding",
       });
     }
     if (config.exteriorFinish.cedarAccents) {
@@ -124,18 +158,23 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
     }
   }
 
-  // ─── Insulation (only for enclosed builds) ────────────────────────
-  if (enclosed && config.exteriorFinish.insulation !== "none") {
+  // ─── Insulation (only for enclosed portion) ───────────────────────
+  if (enclosure.anyEnclosed && config.exteriorFinish.insulation !== "none") {
     const insulationRate =
       config.exteriorFinish.insulation === "vinyl-faced-fiberglass"
         ? PRICING.INSULATION_VINYL_FACED_FIBERGLASS_PER_SQFT
         : config.exteriorFinish.insulation === "spray-foam"
           ? PRICING.INSULATION_SPRAY_FOAM_PER_SQFT
           : PRICING.INSULATION_IMP_PER_SQFT;
-    // Walls + ceiling (ceiling ≈ footprint for a single-story)
+    // Walls + ceiling, scaled by enclosed fraction
     items.push({
       label: `Insulation (${config.exteriorFinish.insulation})`,
-      amount: round(insulationRate * (wallSqFt + footprintSqFt)),
+      amount: round(
+        insulationRate * (enclosedWallSqFt + enclosedFootprint),
+      ),
+      notes: enclosure.mixed
+        ? `Applied to ${enclosure.closedCount} of ${enclosure.total} enclosed bays`
+        : undefined,
     });
   }
 

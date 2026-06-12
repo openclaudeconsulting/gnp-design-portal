@@ -6,11 +6,29 @@ import {
   NumberInput,
   ToggleGroup,
 } from "@/components/ui/inputs";
+import { getEnclosureSummary } from "@/lib/services/enclosure-utils";
+
 import { useWizard } from "./WizardProvider";
 
 export function StepShell() {
   const { config, patchShell } = useWizard();
   const s = config.shell;
+
+  const summary = getEnclosureSummary(s.bayEnclosures);
+  const preset: "all" | "none" | "custom" = summary.fullyEnclosed
+    ? "all"
+    : summary.fullyOpen
+      ? "none"
+      : "custom";
+
+  const setAllEnclosed = (enclosed: boolean) =>
+    patchShell({ bayEnclosures: Array(s.numberOfBays).fill(enclosed) });
+
+  const toggleBay = (i: number) => {
+    const next = [...s.bayEnclosures];
+    next[i] = !next[i];
+    patchShell({ bayEnclosures: next });
+  };
 
   return (
     <div className="space-y-6">
@@ -19,26 +37,74 @@ export function StepShell() {
         80 ft (above that, the steel truss spec jumps tiers).
       </p>
 
-      {/* ── Enclosed vs Open — primary price driver ─────────────── */}
+      {/* ── Enclosure preset (primary price driver) ─────────────── */}
       <ToggleGroup
         label="Wall enclosure"
-        value={s.enclosed ? "enclosed" : "open"}
-        onChange={(v) => patchShell({ enclosed: v === "enclosed" })}
+        value={preset}
+        onChange={(v) => {
+          if (v === "all") setAllEnclosed(true);
+          else if (v === "none") setAllEnclosed(false);
+          // "custom" — leave bayEnclosures as-is; customer toggles bays below
+        }}
         options={[
           {
-            value: "enclosed",
-            label: "Enclosed",
-            desc: "Walls + roof — barndominium, workshop, garage ($14/sqft base)",
+            value: "all",
+            label: "All enclosed",
+            desc: "Walls around every bay — barndominium / workshop / garage ($14/sqft)",
           },
           {
-            value: "open",
-            label: "Open pole barn",
-            desc: "Roof only, no walls — ag / equipment / hay cover ($6.55-$7.50/sqft base)",
+            value: "none",
+            label: "All open",
+            desc: "Roof only, no walls anywhere — ag / equipment / hay cover ($6.55-$7.50/sqft)",
+          },
+          {
+            value: "custom",
+            label: "Custom (mixed)",
+            desc: "Pick bay-by-bay below — some enclosed, some open",
           },
         ]}
-        columns={2}
+        columns={3}
       />
 
+      {/* ── Per-bay picker ─────────────────────────────────────── */}
+      <div className="rounded-md border border-zinc-800 bg-zinc-950/40 px-4 py-3">
+        <div className="flex items-baseline justify-between mb-2">
+          <div className="text-sm font-medium text-zinc-300">
+            Bays ({summary.closedCount} of {summary.total} enclosed)
+          </div>
+          <div className="text-xs text-zinc-500">
+            Click any bay to toggle enclosed / open
+          </div>
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 gap-1.5">
+          {s.bayEnclosures.map((enclosed, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => toggleBay(i)}
+              className={[
+                "px-2 py-2 rounded-md text-xs font-medium border transition-colors text-left",
+                enclosed
+                  ? "border-amber-500 bg-amber-500/10 text-amber-100 ring-1 ring-amber-500/30"
+                  : "border-zinc-700 bg-zinc-900 text-zinc-400 hover:border-zinc-600",
+              ].join(" ")}
+            >
+              <div className="font-mono text-[10px] text-zinc-500">
+                Bay {i + 1}
+              </div>
+              <div className="mt-0.5">{enclosed ? "Enclosed" : "Open"}</div>
+            </button>
+          ))}
+        </div>
+        {summary.mixed && (
+          <p className="mt-2 text-[11px] text-zinc-500">
+            Mixed enclosure — quote pro-rates by bay count. Interior dividing
+            walls are added wherever an enclosed bay meets an open one.
+          </p>
+        )}
+      </div>
+
+      {/* ── Dimensions ────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <NumberInput
           label="Width"
@@ -117,9 +183,9 @@ export function StepShell() {
         hint="GNP's signature: open floor plan with no center posts. Adds a per-sqft premium; required for the wide-open great-room look."
       />
 
-      {!s.enclosed && (
+      {summary.fullyOpen && (
         <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">
-          <strong className="text-amber-300">Open pole barn selected.</strong>{" "}
+          <strong className="text-amber-300">All-open pole barn.</strong>{" "}
           Roof sheets and labor to install them are included in the base
           building rate. Siding, insulation, and interior finish steps will
           not affect the quote (no walls to put them on).

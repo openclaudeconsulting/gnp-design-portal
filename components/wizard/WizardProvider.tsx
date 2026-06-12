@@ -29,6 +29,7 @@ import {
   buildQuote,
   type QuoteBreakdown,
 } from "@/lib/services/quote-engine";
+import { resizeBayEnclosures } from "@/lib/services/enclosure-utils";
 import {
   clampRoomToBuilding,
   deriveInterior,
@@ -72,6 +73,13 @@ function derive(c: BuildingConfig): BuildingConfig {
     2
   ).toFixed(1);
 
+  // Keep bayEnclosures the same length as numberOfBays. Resize-aware:
+  // grows by repeating the last value, shrinks by truncating the tail.
+  const bayEnclosures = resizeBayEnclosures(
+    c.shell.bayEnclosures ?? [],
+    numberOfBays,
+  );
+
   // Clamp every room to the (possibly shrunken) building footprint so a
   // shell-size change can't leave rooms hanging off the edge.
   const clampedRooms = c.floorPlan.rooms.map((r) =>
@@ -94,7 +102,7 @@ function derive(c: BuildingConfig): BuildingConfig {
 
   return {
     ...c,
-    shell: { ...c.shell, peakHeightFt, numberOfBays },
+    shell: { ...c.shell, peakHeightFt, numberOfBays, bayEnclosures },
     site: { ...c.site, meanRoofHeightFt },
     floorPlan,
     interior,

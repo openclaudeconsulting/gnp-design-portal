@@ -4,6 +4,10 @@ import { useState } from "react";
 
 import { DISCLAIMERS } from "@/lib/config/disclaimer";
 import {
+  enclosureLabel,
+  getEnclosureSummary,
+} from "@/lib/services/enclosure-utils";
+import {
   submitDesign,
   SubmitError,
   type SubmitResult,
@@ -59,6 +63,10 @@ export function StepReview() {
         },
         { label: "Stories", value: c.shell.stories },
         { label: "Clear-span trusses", value: c.shell.clearSpan ? "Yes" : "No" },
+        {
+          label: "Enclosure",
+          value: enclosureLabel(getEnclosureSummary(c.shell.bayEnclosures)),
+        },
       ],
     },
     {

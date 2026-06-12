@@ -9,6 +9,8 @@ import type {
   InsulationType,
   SidingType,
 } from "@/lib/types/building-config";
+import { getEnclosureSummary } from "@/lib/services/enclosure-utils";
+
 import { useWizard } from "./WizardProvider";
 
 const SIDING_TYPES: { value: SidingType; label: string; desc?: string }[] = [
@@ -79,7 +81,8 @@ const ACCENT_LOCATION_PRESETS = [
 export function StepFinishes() {
   const { config, patchExteriorFinish } = useWizard();
   const f = config.exteriorFinish;
-  const enclosed = config.shell.enclosed;
+  const enclosureSummary = getEnclosureSummary(config.shell.bayEnclosures);
+  const enclosed = enclosureSummary.anyEnclosed;
 
   const toggleAccentLocation = (loc: string) => {
     const current = f.cedarAccentLocations ?? [];

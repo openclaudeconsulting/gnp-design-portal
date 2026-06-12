@@ -39,15 +39,22 @@ export interface BuildingShell {
   stories: 1 | 2;
   clearSpan: boolean;          // true = no interior support columns
   /**
-   * Enclosed = walls all around (barndominium / workshop / garage).
-   * Open = roof only, no walls (ag / equipment cover / hay barn).
+   * Per-bay enclosure state — one boolean per bay, indexed along the
+   * length axis (bay 0 = front/-Z gable end, bay N-1 = back/+Z gable
+   * end). `true` = walls around that bay, `false` = open (roof only).
    *
-   * This is the PRIMARY pricing driver — open pole barns price by the
-   * tiered kit+labor rate (roof included), enclosed buildings price by
-   * the $14/sqft rule (walls + roof + labor combined). See
+   * Length always matches `numberOfBays`; WizardProvider.derive() resizes
+   * the array when the bay count changes (extending with the last value,
+   * truncating from the end).
+   *
+   * Customers commonly want some bays enclosed (workshop / garage / living
+   * area) and the rest open (equipment cover / hay storage). Pricing is
+   * computed per-bay: enclosed bays use the $14/sqft enclosed rate, open
+   * bays use the width-tiered $6.55–$7.50/sqft open rate. See
+   * lib/services/enclosure-utils.ts for the helpers and
    * lib/config/pricing.config.ts for the rates.
    */
-  enclosed: boolean;
+  bayEnclosures: boolean[];
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -269,7 +276,9 @@ export const DEFAULT_BUILDING_CONFIG: BuildingConfig = {
     numberOfBays: 5,
     stories: 1,
     clearSpan: true,
-    enclosed: true,   // most customers want barndominium / workshop / garage
+    // 5 bays at the default 60' length / 12' spacing — all enclosed.
+    // Resized by WizardProvider.derive() when length or spacing change.
+    bayEnclosures: [true, true, true, true, true],
   },
   roof: {
     profile: "gable",
