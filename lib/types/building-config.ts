@@ -87,11 +87,22 @@ export interface RoofConfig {
 export type FoundationType = "none" | "slab" | "crawlspace" | "stem-wall";
 export type SlabThickness = 4 | 6;
 
+/**
+ * Slab coverage — when a customer has a mixed-enclosure building (some
+ * bays walled in, others open), they commonly want the slab under the
+ * ENCLOSED bays only (where they'll stand / store gear) and leave the
+ * open bays on dirt / gravel (where vehicles park). "full" = entire
+ * footprint (the legacy + barndominium default); "enclosed-only" =
+ * pour only under enclosed bays, pro-rated by bay count.
+ */
+export type SlabCoverage = "full" | "enclosed-only";
+
 export interface FoundationConfig {
   type: FoundationType;
   slabThicknessIn: SlabThickness;
   concretePsi: 3000 | 4000;
   thickenedEdges: boolean;
+  slabCoverage: SlabCoverage;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -298,6 +309,7 @@ export const DEFAULT_BUILDING_CONFIG: BuildingConfig = {
     slabThicknessIn: 4,
     concretePsi: 3000,
     thickenedEdges: true,
+    slabCoverage: "full",
   },
   openings: {
     overheadDoors: [],

@@ -1,8 +1,10 @@
 "use client";
 
 import { CheckboxInput, ToggleGroup } from "@/components/ui/inputs";
+import { getEnclosureSummary } from "@/lib/services/enclosure-utils";
 import type {
   FoundationType,
+  SlabCoverage,
   SlabThickness,
 } from "@/lib/types/building-config";
 import { useWizard } from "./WizardProvider";
@@ -57,6 +59,7 @@ export function StepFoundation() {
   const f = config.foundation;
   const isSlab = f.type === "slab";
   const isNone = f.type === "none";
+  const enclosure = getEnclosureSummary(config.shell.bayEnclosures);
 
   return (
     <div className="space-y-6">
@@ -84,6 +87,41 @@ export function StepFoundation() {
 
       {isSlab && (
         <>
+          <ToggleGroup
+            label="Slab coverage"
+            value={f.slabCoverage}
+            onChange={(v) =>
+              patchFoundation({ slabCoverage: v as SlabCoverage })
+            }
+            options={[
+              {
+                value: "full",
+                label: "Whole footprint",
+                desc: "Pour slab under the entire building (default).",
+              },
+              {
+                value: "enclosed-only",
+                label: "Enclosed bays only",
+                desc: enclosure.mixed
+                  ? `Slab under the ${enclosure.closedCount} enclosed bays only; open bays stay on dirt/gravel.`
+                  : enclosure.fullyOpen
+                    ? "No enclosed bays — slab will not appear in the quote."
+                    : "Slab under enclosed bays only (currently identical to whole footprint — all bays are enclosed).",
+              },
+            ]}
+            columns={2}
+          />
+
+          {f.slabCoverage === "enclosed-only" && enclosure.fullyOpen && (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">
+              <strong className="text-amber-300">
+                No enclosed bays detected.
+              </strong>{" "}
+              The slab will not appear in the quote until you mark at least
+              one bay as enclosed on Step Shell.
+            </div>
+          )}
+
           <ToggleGroup
             label="Slab thickness"
             value={f.slabThicknessIn}

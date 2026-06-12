@@ -201,13 +201,42 @@ export function BuildingMesh({ config }: Props) {
       </mesh>
 
       {/* Foundation slab — only when the customer has picked one.
-          "none" = bare dirt / gravel pad (open pole barn default). */}
-      {config.foundation.type !== "none" && (
-        <mesh position={[0, 0.05, 0]} receiveShadow>
-          <boxGeometry args={[w, 0.1, L]} />
-          <meshStandardMaterial color={slabHex} roughness={0.9} metalness={0.05} />
-        </mesh>
-      )}
+          "none" = bare dirt / gravel pad (open pole barn default).
+          For slab + "enclosed-only" coverage, pour one slab segment per
+          enclosed bay so open bays sit on dirt as the customer drew. */}
+      {config.foundation.type !== "none" &&
+        (config.foundation.type === "slab" &&
+        config.foundation.slabCoverage === "enclosed-only" ? (
+          // Per-enclosed-bay slab segments
+          shell.bayEnclosures.map((enclosed, i) => {
+            if (!enclosed) return null;
+            const zCenter = -L / 2 + (i + 0.5) * bayLength;
+            return (
+              <mesh
+                key={`slab-${i}`}
+                position={[0, 0.05, zCenter]}
+                receiveShadow
+              >
+                <boxGeometry args={[w, 0.1, bayLength]} />
+                <meshStandardMaterial
+                  color={slabHex}
+                  roughness={0.9}
+                  metalness={0.05}
+                />
+              </mesh>
+            );
+          })
+        ) : (
+          // Single full-footprint slab
+          <mesh position={[0, 0.05, 0]} receiveShadow>
+            <boxGeometry args={[w, 0.1, L]} />
+            <meshStandardMaterial
+              color={slabHex}
+              roughness={0.9}
+              metalness={0.05}
+            />
+          </mesh>
+        ))}
 
       {/* ── Long-wall segments — one per enclosed bay ──────────────── */}
       {shell.bayEnclosures.map((enclosed, i) => {

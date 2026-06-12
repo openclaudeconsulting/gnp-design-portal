@@ -186,18 +186,38 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
       config.foundation.slabThicknessIn === 6
         ? PRICING.SLAB_6IN_PER_SQFT
         : PRICING.SLAB_4IN_PER_SQFT;
-    let slabCost = slabRate * footprintSqFt;
-    if (config.foundation.concretePsi === 4000) {
-      slabCost += PRICING.CONCRETE_4000_PSI_UPCHARGE_PER_SQFT * footprintSqFt;
+
+    // Slab coverage — full footprint, or only under enclosed bays.
+    // "enclosed-only" pro-rates by bay count (same approximation used
+    // for siding / insulation: every bay covers an equal footprint
+    // share, and gable / dividing walls are a small share of total
+    // perimeter so the linear-foot edge calc is close enough).
+    const coverageFrac =
+      config.foundation.slabCoverage === "enclosed-only"
+        ? enclosedFrac
+        : 1;
+    const slabSqFt = footprintSqFt * coverageFrac;
+
+    if (slabSqFt > 0) {
+      let slabCost = slabRate * slabSqFt;
+      if (config.foundation.concretePsi === 4000) {
+        slabCost += PRICING.CONCRETE_4000_PSI_UPCHARGE_PER_SQFT * slabSqFt;
+      }
+      if (config.foundation.thickenedEdges) {
+        const perimeter = 2 * (config.shell.widthFt + config.shell.lengthFt);
+        slabCost +=
+          PRICING.THICKENED_EDGES_PER_LINEAR_FT * perimeter * coverageFrac;
+      }
+      const coverageNote =
+        config.foundation.slabCoverage === "enclosed-only"
+          ? ` · enclosed bays only (${enclosure.closedCount} of ${enclosure.total})`
+          : "";
+      items.push({
+        label: `Slab (${config.foundation.slabThicknessIn}", ${config.foundation.concretePsi} PSI${coverageNote})`,
+        amount: round(slabCost),
+      });
     }
-    if (config.foundation.thickenedEdges) {
-      const perimeter = 2 * (config.shell.widthFt + config.shell.lengthFt);
-      slabCost += PRICING.THICKENED_EDGES_PER_LINEAR_FT * perimeter;
-    }
-    items.push({
-      label: `Slab (${config.foundation.slabThicknessIn}", ${config.foundation.concretePsi} PSI)`,
-      amount: round(slabCost),
-    });
+    // (If enclosed-only AND no bays are enclosed → no slab line.)
   } else if (config.foundation.type === "crawlspace") {
     items.push({
       label: "Crawlspace foundation",
