@@ -6,6 +6,7 @@ import {
   RemovableCard,
   ToggleGroup,
 } from "@/components/ui/inputs";
+import { getEnclosureSummary } from "@/lib/services/enclosure-utils";
 import type {
   EntryDoor,
   EntryDoorType,
@@ -114,12 +115,36 @@ export function StepOpenings() {
   const removeWindow = (i: number) =>
     patchOpenings({ windows: o.windows.filter((_, idx) => idx !== i) });
 
+  const enclosure = getEnclosureSummary(config.shell.bayEnclosures);
+
   return (
     <div className="space-y-8">
       <p className="text-sm text-zinc-400">
         Add overhead doors, entry doors, and windows. Position is the distance
         in feet from the left edge of the chosen wall.
       </p>
+
+      {enclosure.mixed && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/90">
+          <strong className="text-amber-300">Mixed enclosure:</strong> wall
+          labels (front / back / left / right) refer to the{" "}
+          <strong>{enclosure.closedCount}-bay enclosed section</strong>, not
+          the entire building. &quot;Front&quot; sits on the front-most
+          enclosed wall (the dividing wall with the open bays if your
+          enclosed section isn&apos;t at the front of the building).
+          Openings placed on a wall that lands in an open bay will be
+          hidden from the 3D view.
+        </div>
+      )}
+
+      {enclosure.fullyOpen && (
+        <div className="rounded-md border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-amber-200/80">
+          <strong className="text-amber-300">All-open pole barn:</strong> no
+          walls exist, so doors / windows you add here won&apos;t appear in
+          the 3D view or affect the quote. Enclose at least one bay on Step
+          Shell to place openings.
+        </div>
+      )}
 
       {/* OVERHEAD DOORS */}
       <section className="space-y-3">

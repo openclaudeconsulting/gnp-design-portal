@@ -22,7 +22,10 @@
 import { Fragment, useMemo } from "react";
 import * as THREE from "three";
 
-import { getEnclosureSummary } from "@/lib/services/enclosure-utils";
+import {
+  getEnclosedSection,
+  getEnclosureSummary,
+} from "@/lib/services/enclosure-utils";
 import type {
   BuildingConfig,
   OverheadDoor,
@@ -86,22 +89,35 @@ export function BuildingMesh({ config }: Props) {
   const bayLength = L / N;
   const enclosure = getEnclosureSummary(shell.bayEnclosures);
 
-  // Helper — for an opening on a left/right wall at positionFt from the
-  // front, return the bay index it sits in. Front/back walls only have
-  // one bay's worth (the end bay).
-  const bayAtPositionAlongLength = (positionFt: number) => {
-    return Math.max(0, Math.min(N - 1, Math.floor(positionFt / bayLength)));
-  };
+  // Enclosed-section bounds — "front" wall for openings is at z = frontZ
+  // (the front face of the enclosed section, NOT the building's gable
+  // end at bay 0). When fully enclosed, frontZ = -L/2 / backZ = +L/2,
+  // so behavior is identical to a full-building convention.
+  const enclosedSection = getEnclosedSection(shell.bayEnclosures);
+  const frontZ = enclosedSection
+    ? -L / 2 + enclosedSection.firstIdx * bayLength
+    : -L / 2;
+  const backZ = enclosedSection
+    ? -L / 2 + (enclosedSection.lastIdx + 1) * bayLength
+    : L / 2;
+
+  // Filter — only render openings whose underlying wall actually exists
+  // (the bay containing the opening is enclosed). For left/right walls
+  // we walk the section from front-to-back (right wall) or back-to-front
+  // (left wall) to identify the containing bay.
   const isOpeningWallEnclosed = (op: {
     wall: Wall;
     positionFt: number;
     widthFt: number;
   }) => {
-    if (op.wall === "front") return shell.bayEnclosures[0] ?? false;
-    if (op.wall === "back")
-      return shell.bayEnclosures[N - 1] ?? false;
-    const center = op.positionFt + op.widthFt / 2;
-    return shell.bayEnclosures[bayAtPositionAlongLength(center)] ?? false;
+    if (!enclosedSection) return false;
+    if (op.wall === "front" || op.wall === "back") return true;
+    const xCenter = op.positionFt + op.widthFt / 2;
+    const doorZ =
+      op.wall === "left" ? backZ - xCenter : frontZ + xCenter;
+    const bayIdx = Math.floor((doorZ + L / 2) / bayLength);
+    if (bayIdx < 0 || bayIdx >= shell.bayEnclosures.length) return false;
+    return shell.bayEnclosures[bayIdx] ?? false;
   };
 
   // Roof geometry — switches per profile
@@ -340,7 +356,10 @@ export function BuildingMesh({ config }: Props) {
         </mesh>
       ))}
 
-      {/* Openings — only render on walls that actually exist */}
+      {/* Openings — only render on walls that actually exist.
+          Building dims passed to the marker INCLUDE enclosed-section
+          bounds so "front" / "back" position to the front / back of
+          the enclosed section, not the full building. */}
       {enclosure.anyEnclosed && (
         <>
           {config.openings.overheadDoors
@@ -349,7 +368,7 @@ export function BuildingMesh({ config }: Props) {
               <DoorMarker
                 key={`oh-${i}`}
                 opening={d}
-                building={{ w, L, h }}
+                building={{ w, L, h, frontZ, backZ }}
                 color="#0a0a0a"
                 variant="overhead"
               />
@@ -360,7 +379,7 @@ export function BuildingMesh({ config }: Props) {
               <DoorMarker
                 key={`ed-${i}`}
                 opening={d}
-                building={{ w, L, h }}
+                building={{ w, L, h, frontZ, backZ }}
                 color="#3b2418"
                 variant="entry"
               />
@@ -371,7 +390,7 @@ export function BuildingMesh({ config }: Props) {
               <WindowMarker
                 key={`wn-${i}`}
                 opening={wnd}
-                building={{ w, L, h }}
+                building={{ w, L, h, frontZ, backZ }}
               />
             ))}
         </>
@@ -400,12 +419,24 @@ interface OpeningGeom {
 
 const WALL_OFFSET = 0.18;
 
+/**
+ * Compute the 3D transform for an opening marker, positioning it on the
+ * enclosed-section's wall (not necessarily the building's gable end).
+ *
+ * frontZ / backZ are the Z coordinates of the enclosed section's front
+ * and back faces. When the building is fully enclosed, these are
+ * -L/2 and +L/2 — identical to the legacy full-building convention.
+ * When mixed enclosure has e.g. bays 3-5 enclosed only, frontZ is at
+ * the dividing wall between bay 2 (open) and bay 3 (enclosed), and the
+ * "front" door sits on the OUTSIDE of that dividing wall (z slightly
+ * less than frontZ).
+ */
 function openingTransform(
   wall: Wall,
   positionFt: number,
   widthFt: number,
   heightFt: number,
-  b: { w: number; L: number; h: number },
+  b: { w: number; L: number; h: number; frontZ: number; backZ: number },
   yLiftFt = 0.5,
 ): OpeningGeom {
   const xCenter = positionFt + widthFt / 2;
@@ -414,22 +445,22 @@ function openingTransform(
   switch (wall) {
     case "front":
       return {
-        position: [-b.w / 2 + xCenter, yCenter, -b.L / 2 - WALL_OFFSET],
+        position: [-b.w / 2 + xCenter, yCenter, b.frontZ - WALL_OFFSET],
         rotation: [0, 0, 0],
       };
     case "back":
       return {
-        position: [b.w / 2 - xCenter, yCenter, b.L / 2 + WALL_OFFSET],
+        position: [b.w / 2 - xCenter, yCenter, b.backZ + WALL_OFFSET],
         rotation: [0, Math.PI, 0],
       };
     case "left":
       return {
-        position: [-b.w / 2 - WALL_OFFSET, yCenter, b.L / 2 - xCenter],
+        position: [-b.w / 2 - WALL_OFFSET, yCenter, b.backZ - xCenter],
         rotation: [0, -Math.PI / 2, 0],
       };
     case "right":
       return {
-        position: [b.w / 2 + WALL_OFFSET, yCenter, -b.L / 2 + xCenter],
+        position: [b.w / 2 + WALL_OFFSET, yCenter, b.frontZ + xCenter],
         rotation: [0, Math.PI / 2, 0],
       };
   }
@@ -442,7 +473,7 @@ function DoorMarker({
   variant,
 }: {
   opening: OverheadDoor | EntryDoor;
-  building: { w: number; L: number; h: number };
+  building: { w: number; L: number; h: number; frontZ: number; backZ: number };
   color: string;
   variant: "overhead" | "entry";
 }) {
@@ -491,7 +522,7 @@ function WindowMarker({
   building,
 }: {
   opening: Wnd;
-  building: { w: number; L: number; h: number };
+  building: { w: number; L: number; h: number; frontZ: number; backZ: number };
 }) {
   const isSignature =
     opening.type === "two-story-wall" || opening.type === "gable-end";

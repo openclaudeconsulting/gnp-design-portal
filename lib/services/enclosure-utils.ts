@@ -18,6 +18,40 @@
  *   - Submit summary: enclosure breakdown for the PE / Carson
  */
 
+/**
+ * Bounding range of the enclosed bays along the length axis. Used by
+ * the 3D viewport + StepOpenings so that "front" / "back" / "left" /
+ * "right" wall labels refer to the ENCLOSED SECTION, not the entire
+ * building. With mixed enclosure (e.g. bays 3-5 enclosed, 1-2 open),
+ * a customer placing a door on the "front" wall expects it on the
+ * front of their enclosed workshop — not on the open-bay equipment
+ * cover end.
+ *
+ * Returns null when no bays are enclosed (no walls exist).
+ * For non-contiguous enclosure (rare), returns the OUTER bounding box —
+ * the 3D viewport's per-bay opening filter still hides openings whose
+ * containing bay happens to be open in the middle of the range.
+ */
+export interface EnclosedSection {
+  firstIdx: number;  // index of first enclosed bay (0-based)
+  lastIdx: number;   // index of last enclosed bay (inclusive)
+}
+
+export function getEnclosedSection(
+  bayEnclosures: boolean[],
+): EnclosedSection | null {
+  let firstIdx = -1;
+  let lastIdx = -1;
+  for (let i = 0; i < bayEnclosures.length; i++) {
+    if (bayEnclosures[i]) {
+      if (firstIdx === -1) firstIdx = i;
+      lastIdx = i;
+    }
+  }
+  if (firstIdx === -1) return null;
+  return { firstIdx, lastIdx };
+}
+
 export interface EnclosureSummary {
   /** All N bays are enclosed (walls all around). */
   fullyEnclosed: boolean;
