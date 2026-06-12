@@ -9,9 +9,14 @@ import { useWizard } from "./WizardProvider";
 
 const TYPES: { value: FoundationType; label: string; desc?: string }[] = [
   {
+    value: "none",
+    label: "None",
+    desc: "No concrete — bare dirt or gravel pad (open pole barn default)",
+  },
+  {
     value: "slab",
     label: "Slab on grade",
-    desc: '4" or 6" reinforced concrete (most common)',
+    desc: '4" or 6" reinforced concrete (most common for enclosed builds)',
   },
   {
     value: "crawlspace",
@@ -51,12 +56,14 @@ export function StepFoundation() {
   const { config, patchFoundation } = useWizard();
   const f = config.foundation;
   const isSlab = f.type === "slab";
+  const isNone = f.type === "none";
 
   return (
     <div className="space-y-6">
       <p className="text-sm text-zinc-400">
-        Foundation choice + slab spec are owner-set and feed straight into the
-        PE submittal. Slab-specific options only appear when slab is selected.
+        Foundation choice + slab spec feed straight into the PE submittal.
+        Default is &quot;None&quot; — open pole barns commonly skip the slab.
+        Slab-specific options appear when slab is selected.
       </p>
 
       <ToggleGroup
@@ -65,6 +72,15 @@ export function StepFoundation() {
         onChange={(v) => patchFoundation({ type: v as FoundationType })}
         options={TYPES}
       />
+
+      {isNone && (
+        <div className="rounded-md border border-zinc-800 bg-zinc-950/50 px-4 py-3 text-xs text-zinc-400">
+          <strong className="text-zinc-200">No foundation in the quote.</strong>{" "}
+          Bay posts sit on simple concrete footings at each pole (priced into
+          the kit). Pick a slab / crawlspace / stem-wall above if you want a
+          full foundation included in the quote.
+        </div>
+      )}
 
       {isSlab && (
         <>

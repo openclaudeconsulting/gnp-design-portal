@@ -179,6 +179,8 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
   }
 
   // ─── Foundation ──────────────────────────────────────────────────
+  // "none" = no foundation line at all (open pole barn on dirt / gravel
+  // pad). The other three add their respective line item.
   if (config.foundation.type === "slab") {
     const slabRate =
       config.foundation.slabThicknessIn === 6
@@ -201,12 +203,13 @@ export function buildQuote(config: BuildingConfig): QuoteBreakdown {
       label: "Crawlspace foundation",
       amount: round(PRICING.CRAWLSPACE_PER_SQFT * footprintSqFt),
     });
-  } else {
+  } else if (config.foundation.type === "stem-wall") {
     items.push({
       label: "Stem wall foundation",
       amount: round(PRICING.STEM_WALL_PER_SQFT * footprintSqFt),
     });
   }
+  // "none" → no foundation line; skip
 
   // ─── Openings ────────────────────────────────────────────────────
   let openingsCost = 0;

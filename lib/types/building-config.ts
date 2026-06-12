@@ -84,7 +84,7 @@ export interface RoofConfig {
 // Foundation / slab (owner's domain — explicit fields)
 // ──────────────────────────────────────────────────────────────────────────
 
-export type FoundationType = "slab" | "crawlspace" | "stem-wall";
+export type FoundationType = "none" | "slab" | "crawlspace" | "stem-wall";
 export type SlabThickness = 4 | 6;
 
 export interface FoundationConfig {
@@ -276,9 +276,11 @@ export const DEFAULT_BUILDING_CONFIG: BuildingConfig = {
     numberOfBays: 5,
     stories: 1,
     clearSpan: true,
-    // 5 bays at the default 60' length / 12' spacing — all enclosed.
-    // Resized by WizardProvider.derive() when length or spacing change.
-    bayEnclosures: [true, true, true, true, true],
+    // Default = open pole barn (no walls anywhere). Customers click the
+    // "Convert to Barndominium" CTA on Step Shell to flip every bay to
+    // enclosed + add a slab in one step. Many customers DON'T want a
+    // barndominium — equipment covers, hay storage, etc.
+    bayEnclosures: [false, false, false, false, false],
   },
   roof: {
     profile: "gable",
@@ -288,7 +290,11 @@ export const DEFAULT_BUILDING_CONFIG: BuildingConfig = {
     material: "exposed-fastener-metal",   // the bundled standard
   },
   foundation: {
-    type: "slab",
+    // Default = no foundation. Open pole barns commonly skip the slab
+    // (gravel pad or bare dirt for ag use). Slab is added automatically
+    // when the customer clicks "Convert to Barndominium" on Step Shell,
+    // and can be picked manually on Step Foundation.
+    type: "none",
     slabThicknessIn: 4,
     concretePsi: 3000,
     thickenedEdges: true,

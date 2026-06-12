@@ -200,11 +200,14 @@ export function BuildingMesh({ config }: Props) {
         <meshStandardMaterial color="#8a6e4b" roughness={1} />
       </mesh>
 
-      {/* Foundation slab */}
-      <mesh position={[0, 0.05, 0]} receiveShadow>
-        <boxGeometry args={[w, 0.1, L]} />
-        <meshStandardMaterial color={slabHex} roughness={0.9} metalness={0.05} />
-      </mesh>
+      {/* Foundation slab — only when the customer has picked one.
+          "none" = bare dirt / gravel pad (open pole barn default). */}
+      {config.foundation.type !== "none" && (
+        <mesh position={[0, 0.05, 0]} receiveShadow>
+          <boxGeometry args={[w, 0.1, L]} />
+          <meshStandardMaterial color={slabHex} roughness={0.9} metalness={0.05} />
+        </mesh>
+      )}
 
       {/* ── Long-wall segments — one per enclosed bay ──────────────── */}
       {shell.bayEnclosures.map((enclosed, i) => {

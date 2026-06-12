@@ -11,8 +11,9 @@ import { getEnclosureSummary } from "@/lib/services/enclosure-utils";
 import { useWizard } from "./WizardProvider";
 
 export function StepShell() {
-  const { config, patchShell } = useWizard();
+  const { config, patchShell, setConfig } = useWizard();
   const s = config.shell;
+  const f = config.foundation;
 
   const summary = getEnclosureSummary(s.bayEnclosures);
   const preset: "all" | "none" | "custom" = summary.fullyEnclosed
@@ -20,6 +21,25 @@ export function StepShell() {
     : summary.fullyOpen
       ? "none"
       : "custom";
+
+  // "Barndominium package" = fully enclosed + a concrete slab. The CTA
+  // is hidden when the customer is already in that state.
+  const isBarndominium =
+    summary.fullyEnclosed && f.type === "slab";
+
+  const convertToBarndominium = () => {
+    setConfig((c) => ({
+      ...c,
+      shell: {
+        ...c.shell,
+        bayEnclosures: Array(c.shell.numberOfBays).fill(true),
+      },
+      foundation: {
+        ...c.foundation,
+        type: "slab",
+      },
+    }));
+  };
 
   const setAllEnclosed = (enclosed: boolean) =>
     patchShell({ bayEnclosures: Array(s.numberOfBays).fill(enclosed) });
@@ -36,6 +56,28 @@ export function StepShell() {
         Overall building dimensions and structural strategy. Width is capped at
         80 ft (above that, the steel truss spec jumps tiers).
       </p>
+
+      {/* ── Convert-to-barndominium preset ────────────────────── */}
+      {!isBarndominium && (
+        <button
+          type="button"
+          onClick={convertToBarndominium}
+          className="w-full text-left rounded-lg border border-amber-500/50 bg-amber-500/10 hover:bg-amber-500/20 hover:border-amber-400 px-4 py-3 transition-colors"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-amber-200">
+                Convert to Barndominium
+              </div>
+              <div className="text-xs text-amber-100/70 mt-0.5">
+                Enclose every bay with walls + add a 4&quot; concrete slab
+                foundation in one click. Fine-tune below after.
+              </div>
+            </div>
+            <div className="text-amber-300 text-xl font-light shrink-0">→</div>
+          </div>
+        </button>
+      )}
 
       {/* ── Enclosure preset (primary price driver) ─────────────── */}
       <ToggleGroup
